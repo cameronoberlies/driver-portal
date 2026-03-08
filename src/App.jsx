@@ -32,6 +32,28 @@ function formatCurrency(n) {
 
 function getMonth(dateStr) { return dateStr.slice(0, 7); }
 
+function formatPayPeriod() {
+  const { start, end } = getWeekBounds(new Date());
+  const opts = { month: "short", day: "numeric" };
+  const s = start.toLocaleDateString("en-US", opts);
+  const e = end.toLocaleDateString("en-US", { ...opts, year: "numeric" });
+  return `Pay Period: ${s} – ${e}`;
+}
+
+function PayPeriodBanner() {
+  return (
+    <div style={{
+      display: "inline-flex", alignItems: "center", gap: 8,
+      background: "rgba(255,184,0,0.08)", border: "1px solid rgba(255,184,0,0.2)",
+      borderRadius: 6, padding: "6px 14px", marginBottom: 20,
+      fontSize: 12, fontWeight: 600, letterSpacing: 1.5,
+      textTransform: "uppercase", color: "var(--accent)"
+    }}>
+      <span style={{ fontSize: 14 }}>📅</span> {formatPayPeriod()}
+    </div>
+  );
+}
+
 function calcReconStreak(entries) {
   const sorted = [...entries].sort((a, b) => new Date(b.date) - new Date(a.date));
   let streak = 0;
@@ -372,6 +394,7 @@ function DriverDashboard({ driver, entries, tab, setTab }) {
     <div className="page">
       <div className="page-title fade-in">Welcome back, {driver.name.split(" ")[0]}</div>
       <div className="page-sub fade-in">Your earnings & trip summary</div>
+      <PayPeriodBanner />
 
       <div className="tabs">
         {["overview", "weekly report", "monthly report"].map(t => (
@@ -689,6 +712,7 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
 
       <div className="page-title fade-in">Admin Dashboard</div>
       <div className="page-sub fade-in">Manage driver entries and view all accounts</div>
+      <PayPeriodBanner />
 
       <div className="tabs">
         {["overview", "log entry", "all entries"].map(t => (
