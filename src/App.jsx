@@ -448,7 +448,7 @@ function DriverDashboard({ driver, entries, tab, setTab }) {
           <div className="table-wrap fade-in fade-in-4">
             <div className="table-head"><div className="table-head-title">Recent Trips</div></div>
             <table>
-              <thead><tr><th>Date</th><th>City</th><th>CRM Lead</th><th>Pay</th><th>Hours</th><th>Recon</th></tr></thead>
+              <thead><tr><th>Date</th><th>City</th><th>Carpage ID</th><th>Pay</th><th>Hours</th><th>Recon</th></tr></thead>
               <tbody>
                 {[...entries].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10).map(e => (
                   <tr key={e.id}>
@@ -580,7 +580,7 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
             <input type="text" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
           </div>
           <div className="field">
-            <label>CRM Lead ID</label>
+            <label>Carpage ID</label>
             <input type="text" value={form.crm_id} onChange={e => setForm(f => ({ ...f, crm_id: e.target.value }))} />
           </div>
         </div>
@@ -600,7 +600,7 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
 
 // ─── CSV EXPORT HELPER ────────────────────────────────────────────────────────
 function exportCSV(entries, profiles) {
-  const headers = ["Driver", "Date", "City", "CRM Lead", "Pay", "Hours", "Miles", "Recon Missed"];
+  const headers = ["Driver", "Date", "City", "Carpage ID", "Pay", "Hours", "Miles", "Recon Missed"];
   const rows = [...entries]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map(e => {
@@ -784,8 +784,8 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
                   <input type="text" placeholder="Charlotte" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
                 </div>
                 <div className="field">
-                  <label>CRM Lead ID</label>
-                  <input type="text" placeholder="CRM-XXXX" value={form.crm_id} onChange={e => setForm(f => ({ ...f, crm_id: e.target.value }))} />
+                  <label>Carpage ID</label>
+                  <input type="text" placeholder="CP-XXXX" value={form.crm_id} onChange={e => setForm(f => ({ ...f, crm_id: e.target.value }))} />
                 </div>
               </div>
               <div className="checkbox-row">
@@ -843,7 +843,7 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
               <span style={{ fontSize: 12, color: "var(--muted)" }}>{filteredEntries.length} of {entries.length} entries</span>
             </div>
             <table>
-              <thead><tr><th>Driver</th><th>Date</th><th>City</th><th>CRM Lead</th><th>Pay</th><th>Hours</th><th>Miles</th><th>Recon</th><th></th></tr></thead>
+              <thead><tr><th>Driver</th><th>Date</th><th>City</th><th>Carpage ID</th><th>Pay</th><th>Hours</th><th>Miles</th><th>Recon</th><th></th></tr></thead>
               <tbody>
                 {[...filteredEntries].sort((a, b) => new Date(b.date) - new Date(a.date)).map(e => {
                   const driver = allProfiles.find(u => u.id === e.driver_id);
