@@ -392,8 +392,8 @@ function DriverDashboard({ driver, entries, tab, setTab }) {
 
   return (
     <div className="page">
-      <div className="page-title fade-in">Welcome back, {driver.name.split(" ")[0]}</div>
-      <div className="page-sub fade-in">Your earnings & trip summary</div>
+      <div className="page-title fade-in">{driver.role === "admin" ? `Welcome back, ${driver.name.split(" ")[0]}` : `Driver Profile — ${driver.name}`}</div>
+      <div className="page-sub fade-in">{driver.role === "admin" ? "Your earnings & trip summary" : `Viewing ${driver.name}'s earnings & trips`}</div>
       <PayPeriodBanner />
 
       <div className="tabs">
