@@ -526,7 +526,7 @@ function DriverDashboard({ driver, entries, tab, setTab }) {
 
 // ─── EDIT MODAL ───────────────────────────────────────────────────────────────
 function EditEntryModal({ entry, drivers, onSave, onClose }) {
-  const [form, setForm] = useState({ ...entry, pay: String(entry.pay), hours: String(entry.hours), miles: String(entry.miles ?? 0) });
+  const [form, setForm] = useState({ ...entry, pay: String(entry.pay), hours: String(entry.hours), miles: String(entry.miles ?? 0), actual_cost: String(entry.actual_cost ?? 0), estimated_cost: String(entry.estimated_cost ?? 0) });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -539,12 +539,14 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
       pay: Number(form.pay),
       hours: Number(form.hours),
       miles: Number(form.miles),
+      actual_cost: Number(form.actual_cost),
+      estimated_cost: Number(form.estimated_cost),
       city: form.city,
       crm_id: form.crm_id,
       recon_missed: form.recon_missed,
     }).eq("id", form.id);
     if (err) { setError(err.message); setSaving(false); return; }
-    onSave({ ...form, pay: Number(form.pay), hours: Number(form.hours), miles: Number(form.miles) });
+    onSave({ ...form, pay: Number(form.pay), hours: Number(form.hours), miles: Number(form.miles), actual_cost: Number(form.actual_cost), estimated_cost: Number(form.estimated_cost) });
     setSaving(false);
   }
 
@@ -576,6 +578,14 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
             <input type="number" value={form.miles} onChange={e => setForm(f => ({ ...f, miles: e.target.value }))} />
           </div>
           <div className="field">
+            <label>Actual Cost ($)</label>
+            <input type="number" value={form.actual_cost} onChange={e => setForm(f => ({ ...f, actual_cost: e.target.value }))} />
+          </div>
+          <div className="field">
+            <label>Estimated Cost ($)</label>
+            <input type="number" value={form.estimated_cost} onChange={e => setForm(f => ({ ...f, estimated_cost: e.target.value }))} />
+          </div>
+          <div className="field">
             <label>City</label>
             <input type="text" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
           </div>
@@ -600,7 +610,7 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
 
 // ─── CSV EXPORT HELPER ────────────────────────────────────────────────────────
 function exportCSV(entries, profiles) {
-  const headers = ["Driver", "Date", "City", "Carpage ID", "Pay", "Hours", "Miles", "Recon Missed"];
+  const headers = ["Driver", "Date", "City", "Carpage ID", "Pay", "Hours", "Miles", "Actual Cost", "Estimated Cost", "Recon Missed"];
   const rows = [...entries]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map(e => {
@@ -613,6 +623,8 @@ function exportCSV(entries, profiles) {
         e.pay,
         e.hours,
         e.miles ?? 0,
+        e.actual_cost ?? 0,
+        e.estimated_cost ?? 0,
         e.recon_missed ? "Yes" : "No",
       ];
     });
@@ -624,6 +636,116 @@ function exportCSV(entries, profiles) {
   a.download = `driverpay-export-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ─── MILEAGE COST REPORT ──────────────────────────────────────────────────────
+function MileageCostReport({ entries, drivers, allProfiles, thisMonth, wkStart, wkEnd }) {
+  const [reportType, setReportType] = useState("weekly");
+  const [selectedDriver, setSelectedDriver] = useState("all");
+
+  const filtered = entries.filter(e => {
+    const inPeriod = reportType === "weekly"
+      ? (() => { const d = new Date(e.date + "T12:00:00"); return d >= wkStart && d <= wkEnd; })()
+      : getMonth(e.date) === thisMonth;
+    const inDriver = selectedDriver === "all" || e.driver_id === selectedDriver;
+    return inPeriod && inDriver;
+  });
+
+  const totalActual = filtered.reduce((s, e) => s + Number(e.actual_cost ?? 0), 0);
+  const totalEstimated = filtered.reduce((s, e) => s + Number(e.estimated_cost ?? 0), 0);
+  const totalMiles = filtered.reduce((s, e) => s + Number(e.miles ?? 0), 0);
+  const variance = totalActual - totalEstimated;
+
+  const periodLabel = reportType === "weekly"
+    ? `${wkStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${wkEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+    : new Date(thisMonth + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  return (
+    <div className="fade-in">
+      {/* Controls */}
+      <div className="form-card" style={{ marginBottom: 16, padding: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, alignItems: "end" }}>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>Period</label>
+            <select value={reportType} onChange={e => setReportType(e.target.value)}>
+              <option value="weekly">This Week</option>
+              <option value="monthly">This Month</option>
+            </select>
+          </div>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>Driver</label>
+            <select value={selectedDriver} onChange={e => setSelectedDriver(e.target.value)}>
+              <option value="all">All Drivers</option>
+              {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          <button className="btn btn-primary" style={{ padding: "10px 16px", fontSize: 12 }} onClick={() => exportCSV(filtered, allProfiles)}>
+            ⬇ Export CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="stats-grid" style={{ marginBottom: 20 }}>
+        {[
+          { label: "Total Miles", value: totalMiles + " mi", cls: "", sub: periodLabel },
+          { label: "Total Actual Cost", value: formatCurrency(totalActual), cls: "danger", sub: `${filtered.length} trips` },
+          { label: "Total Estimated Cost", value: formatCurrency(totalEstimated), cls: "blue", sub: `${filtered.length} trips` },
+          { label: "Variance", value: (variance >= 0 ? "+" : "") + formatCurrency(variance), cls: variance > 0 ? "danger" : "success", sub: variance > 0 ? "Over estimate" : variance < 0 ? "Under estimate" : "On target" },
+        ].map((s, i) => (
+          <div key={i} className={`stat-card fade-in fade-in-${i + 1}`}>
+            <div className="stat-label">{s.label}</div>
+            <div className={`stat-value ${s.cls}`}>{s.value}</div>
+            <div className="stat-sub">{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-driver breakdown */}
+      <div className="table-wrap">
+        <div className="table-head">
+          <div className="table-head-title">Cost Breakdown by Trip</div>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>{filtered.length} trips</span>
+        </div>
+        {filtered.length === 0 ? (
+          <div style={{ padding: 24, color: "var(--muted)", fontSize: 14 }}>No entries with cost data for this period.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Driver</th>
+                <th>Date</th>
+                <th>City</th>
+                <th>Miles</th>
+                <th>Actual Cost</th>
+                <th>Estimated Cost</th>
+                <th>Variance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...filtered].sort((a, b) => new Date(b.date) - new Date(a.date)).map(e => {
+                const driver = allProfiles.find(u => u.id === e.driver_id);
+                const v = Number(e.actual_cost ?? 0) - Number(e.estimated_cost ?? 0);
+                return (
+                  <tr key={e.id}>
+                    <td style={{ fontWeight: 600 }}>{driver?.name ?? "—"}</td>
+                    <td>{formatDate(e.date)}</td>
+                    <td>{e.city}</td>
+                    <td style={{ color: "var(--muted)" }}>{e.miles ?? 0} mi</td>
+                    <td style={{ color: "var(--danger)", fontWeight: 600 }}>{formatCurrency(e.actual_cost ?? 0)}</td>
+                    <td style={{ color: "var(--accent)", fontWeight: 600 }}>{formatCurrency(e.estimated_cost ?? 0)}</td>
+                    <td style={{ color: v > 0 ? "var(--danger)" : v < 0 ? "var(--success)" : "var(--muted)", fontWeight: 600 }}>
+                      {v >= 0 ? "+" : ""}{formatCurrency(v)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
@@ -649,7 +771,7 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
   const [form, setForm] = useState({
     driver_id: drivers[0]?.id || "",
     date: now.toISOString().slice(0, 10),
-    pay: "", hours: "", miles: "", city: "", crm_id: "", recon_missed: false,
+    pay: "", hours: "", miles: "", actual_cost: "", estimated_cost: "", city: "", crm_id: "", recon_missed: false,
   });
 
   useEffect(() => {
@@ -667,13 +789,15 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       pay: Number(form.pay),
       hours: Number(form.hours),
       miles: form.miles ? Number(form.miles) : 0,
+      actual_cost: form.actual_cost ? Number(form.actual_cost) : 0,
+      estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
       city: form.city,
       crm_id: form.crm_id,
       recon_missed: form.recon_missed,
     }).select().single();
     if (!error && data) {
       setEntries(prev => [...prev, data]);
-      setForm(f => ({ ...f, pay: "", hours: "", miles: "", city: "", crm_id: "", recon_missed: false }));
+      setForm(f => ({ ...f, pay: "", hours: "", miles: "", actual_cost: "", estimated_cost: "", city: "", crm_id: "", recon_missed: false }));
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     }
@@ -715,7 +839,7 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       <PayPeriodBanner />
 
       <div className="tabs">
-        {["overview", "log entry", "all entries"].map(t => (
+        {["overview", "log entry", "all entries", "mileage costs"].map(t => (
           <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
@@ -778,6 +902,14 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
                 <div className="field">
                   <label>Miles Driven</label>
                   <input type="number" placeholder="0" value={form.miles} onChange={e => setForm(f => ({ ...f, miles: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Actual Cost ($)</label>
+                  <input type="number" placeholder="0.00" value={form.actual_cost} onChange={e => setForm(f => ({ ...f, actual_cost: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Estimated Cost ($)</label>
+                  <input type="number" placeholder="0.00" value={form.estimated_cost} onChange={e => setForm(f => ({ ...f, estimated_cost: e.target.value }))} />
                 </div>
                 <div className="field">
                   <label>City</label>
@@ -865,6 +997,9 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
             </table>
           </div>
         </>
+      )}
+      {tab === "mileage costs" && (
+        <MileageCostReport entries={entries} drivers={drivers} allProfiles={allProfiles} thisMonth={thisMonth} wkStart={wkStart} wkEnd={wkEnd} />
       )}
     </div>
   );
