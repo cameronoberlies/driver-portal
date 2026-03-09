@@ -526,7 +526,7 @@ function DriverDashboard({ driver, entries, tab, setTab }) {
 
 // ─── EDIT MODAL ───────────────────────────────────────────────────────────────
 function EditEntryModal({ entry, drivers, onSave, onClose }) {
-  const [form, setForm] = useState({ ...entry, pay: String(entry.pay), hours: String(entry.hours), miles: String(entry.miles ?? 0), actual_cost: String(entry.actual_cost ?? 0), estimated_cost: String(entry.estimated_cost ?? 0) });
+  const [form, setForm] = useState({ ...entry, pay: String(entry.pay), hours: String(entry.hours), miles: String(entry.miles ?? 0), actual_cost: String(entry.actual_cost ?? 0), estimated_cost: String(entry.estimated_cost ?? 0), carpage_link: entry.carpage_link ?? "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -541,12 +541,13 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
       miles: Number(form.miles),
       actual_cost: Number(form.actual_cost),
       estimated_cost: Number(form.estimated_cost),
+      carpage_link: form.carpage_link || null,
       city: form.city,
       crm_id: form.crm_id,
       recon_missed: form.recon_missed,
     }).eq("id", form.id);
     if (err) { setError(err.message); setSaving(false); return; }
-    onSave({ ...form, pay: Number(form.pay), hours: Number(form.hours), miles: Number(form.miles), actual_cost: Number(form.actual_cost), estimated_cost: Number(form.estimated_cost) });
+    onSave({ ...form, pay: Number(form.pay), hours: Number(form.hours), miles: Number(form.miles), actual_cost: Number(form.actual_cost), estimated_cost: Number(form.estimated_cost), carpage_link: form.carpage_link || null });
     setSaving(false);
   }
 
@@ -593,6 +594,10 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
             <label>Carpage ID</label>
             <input type="text" value={form.crm_id} onChange={e => setForm(f => ({ ...f, crm_id: e.target.value }))} />
           </div>
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label>Carpage Link</label>
+            <input type="url" placeholder="https://..." value={form.carpage_link} onChange={e => setForm(f => ({ ...f, carpage_link: e.target.value }))} />
+          </div>
         </div>
         <div className="checkbox-row" style={{ marginTop: 8 }}>
           <input type="checkbox" id="edit-recon" checked={form.recon_missed} onChange={e => setForm(f => ({ ...f, recon_missed: e.target.checked }))} />
@@ -610,7 +615,7 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
 
 // ─── CSV EXPORT HELPER ────────────────────────────────────────────────────────
 function exportCSV(entries, profiles) {
-  const headers = ["Driver", "Date", "City", "Carpage ID", "Pay", "Hours", "Miles", "Actual Cost", "Estimated Cost", "Recon Missed"];
+  const headers = ["Driver", "Date", "City", "Carpage ID", "Carpage Link", "Pay", "Hours", "Miles", "Actual Cost", "Estimated Cost", "Recon Missed"];
   const rows = [...entries]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map(e => {
@@ -620,6 +625,7 @@ function exportCSV(entries, profiles) {
         e.date,
         e.city,
         e.crm_id,
+        e.carpage_link ?? "",
         e.pay,
         e.hours,
         e.miles ?? 0,
@@ -771,7 +777,7 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
   const [form, setForm] = useState({
     driver_id: drivers[0]?.id || "",
     date: now.toISOString().slice(0, 10),
-    pay: "", hours: "", miles: "", actual_cost: "", estimated_cost: "", city: "", crm_id: "", recon_missed: false,
+    pay: "", hours: "", miles: "", actual_cost: "", estimated_cost: "", city: "", crm_id: "", carpage_link: "", recon_missed: false,
   });
 
   useEffect(() => {
@@ -793,11 +799,12 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
       city: form.city,
       crm_id: form.crm_id,
+      carpage_link: form.carpage_link || null,
       recon_missed: form.recon_missed,
     }).select().single();
     if (!error && data) {
       setEntries(prev => [...prev, data]);
-      setForm(f => ({ ...f, pay: "", hours: "", miles: "", actual_cost: "", estimated_cost: "", city: "", crm_id: "", recon_missed: false }));
+      setForm(f => ({ ...f, pay: "", hours: "", miles: "", actual_cost: "", estimated_cost: "", city: "", crm_id: "", carpage_link: "", recon_missed: false }));
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     }
@@ -919,6 +926,10 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
                   <label>Carpage ID</label>
                   <input type="text" placeholder="CP-XXXX" value={form.crm_id} onChange={e => setForm(f => ({ ...f, crm_id: e.target.value }))} />
                 </div>
+                <div className="field" style={{ gridColumn: "1 / -1" }}>
+                  <label>Carpage Link</label>
+                  <input type="url" placeholder="https://..." value={form.carpage_link} onChange={e => setForm(f => ({ ...f, carpage_link: e.target.value }))} />
+                </div>
               </div>
               <div className="checkbox-row">
                 <input type="checkbox" id="recon" checked={form.recon_missed} onChange={e => setForm(f => ({ ...f, recon_missed: e.target.checked }))} />
@@ -984,7 +995,11 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
                       <td style={{ fontWeight: 600 }}>{driver?.name ?? "—"}</td>
                       <td>{formatDate(e.date)}</td>
                       <td>{e.city}</td>
-                      <td style={{ color: "var(--muted)", fontFamily: "monospace", fontSize: 12 }}>{e.crm_id}</td>
+                      <td style={{ color: "var(--muted)", fontFamily: "monospace", fontSize: 12 }}>
+                        {e.carpage_link
+                          ? <a href={e.carpage_link} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none" }}>{e.crm_id} ↗</a>
+                          : e.crm_id}
+                      </td>
                       <td style={{ color: "var(--accent)", fontWeight: 600 }}>{formatCurrency(e.pay)}</td>
                       <td>{e.hours}h</td>
                       <td style={{ color: "var(--muted)" }}>{e.miles ?? 0} mi</td>
