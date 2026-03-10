@@ -32,6 +32,29 @@ function formatCurrency(n) {
 
 function getMonth(dateStr) { return dateStr.slice(0, 7); }
 
+// Returns the upcoming Sunday (start of next availability week)
+function getNextWeekStart() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun, 6=Sat
+  const daysUntilSun = day === 0 ? 7 : 7 - day;
+  const sun = new Date(now);
+  sun.setDate(now.getDate() + daysUntilSun);
+  sun.setHours(0, 0, 0, 0);
+  return sun;
+}
+
+function getNextWeekLabel() {
+  const sun = getNextWeekStart();
+  const sat = new Date(sun);
+  sat.setDate(sun.getDate() + 6);
+  const opts = { month: "short", day: "numeric" };
+  return `${sun.toLocaleDateString("en-US", opts)} – ${sat.toLocaleDateString("en-US", { ...opts, year: "numeric" })}`;
+}
+
+function isSaturday() {
+  return new Date().getDay() === 6;
+}
+
 function formatPayPeriod() {
   const { start, end } = getWeekBounds(new Date());
   const opts = { month: "short", day: "numeric" };
@@ -366,6 +389,76 @@ function Topbar({ user, onLogout }) {
   );
 }
 
+// ─── DRIVER AVAILABILITY ──────────────────────────────────────────────────────
+const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function DriverAvailability({ driver }) {
+  const weekStart = getNextWeekStart().toISOString().slice(0, 10);
+  const [avail, setAvail] = useState({ sun: false, mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun_done_by: "", mon_done_by: "", tue_done_by: "", wed_done_by: "", thu_done_by: "", fri_done_by: "", sat_done_by: "" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const canSubmit = isSaturday();
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from("availability").select("*").eq("driver_id", driver.id).eq("week_start", weekStart).single();
+      if (data) setAvail({ sun: data.sun, mon: data.mon, tue: data.tue, wed: data.wed, thu: data.thu, fri: data.fri, sat: data.sat, sun_done_by: data.sun_done_by ?? "", mon_done_by: data.mon_done_by ?? "", tue_done_by: data.tue_done_by ?? "", wed_done_by: data.wed_done_by ?? "", thu_done_by: data.thu_done_by ?? "", fri_done_by: data.fri_done_by ?? "", sat_done_by: data.sat_done_by ?? "" });
+      setLoading(false);
+    }
+    load();
+  }, [driver.id, weekStart]);
+
+  async function handleSave() {
+    setSaving(true);
+    const payload = { driver_id: driver.id, week_start: weekStart, ...avail };
+    DAYS.forEach(d => { if (!avail[d]) payload[`${d}_done_by`] = null; });
+    await supabase.from("availability").upsert(payload, { onConflict: "driver_id,week_start" });
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  }
+
+  if (loading) return <div style={{ color: "var(--muted)", padding: 24 }}>Loading...</div>;
+
+  return (
+    <div className="form-card fade-in">
+      <div className="form-card-title">Availability — {getNextWeekLabel()}</div>
+      {!canSubmit && (
+        <div style={{ background: "rgba(255,184,0,0.08)", border: "1px solid rgba(255,184,0,0.2)", borderRadius: 6, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "var(--accent)" }}>
+          Availability can only be submitted on Saturdays. Check back this Saturday!
+        </div>
+      )}
+      <div style={{ display: "grid", gap: 12, marginTop: 8 }}>
+        {DAYS.map((d, i) => (
+          <div key={d} style={{ display: "grid", gridTemplateColumns: "120px 1fr", alignItems: "center", gap: 12, opacity: canSubmit ? 1 : 0.5 }}>
+            <div className="checkbox-row" style={{ margin: 0 }}>
+              <input type="checkbox" id={`avail-${d}`} checked={avail[d]} disabled={!canSubmit} onChange={e => setAvail(a => ({ ...a, [d]: e.target.checked }))} />
+              <label htmlFor={`avail-${d}`} style={{ fontSize: 14, fontWeight: 600 }}>{DAY_LABELS[i]}</label>
+            </div>
+            {avail[d] && canSubmit && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <label style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>Done by</label>
+                <input type="time" value={avail[`${d}_done_by`]} onChange={e => setAvail(a => ({ ...a, [`${d}_done_by`]: e.target.value }))} style={{ width: 120 }} />
+              </div>
+            )}
+            {avail[d] && !canSubmit && avail[`${d}_done_by`] && (
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>Done by {avail[`${d}_done_by`]}</span>
+            )}
+          </div>
+        ))}
+      </div>
+      {canSubmit && (
+        <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Submit Availability →"}
+        </button>
+      )}
+      {saved && <div className="success-toast">✓ Availability submitted!</div>}
+    </div>
+  );
+}
+
 // ─── DRIVER DASHBOARD ─────────────────────────────────────────────────────────
 function DriverDashboard({ driver, entries, tab, setTab }) {
   const now = new Date();
@@ -397,7 +490,7 @@ function DriverDashboard({ driver, entries, tab, setTab }) {
       <PayPeriodBanner />
 
       <div className="tabs">
-        {["overview", "weekly report", "monthly report"].map(t => (
+        {["overview", "weekly report", "monthly report", "availability"].map(t => (
           <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
@@ -519,6 +612,10 @@ function DriverDashboard({ driver, entries, tab, setTab }) {
           </div>
           <button className="btn btn-primary" onClick={() => window.print()}>⬇ Download PDF</button>
         </div>
+      )}
+
+      {tab === "availability" && (
+        <DriverAvailability driver={driver} />
       )}
     </div>
   );
@@ -846,7 +943,7 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       <PayPeriodBanner />
 
       <div className="tabs">
-        {["overview", "log entry", "all entries", "mileage costs"].map(t => (
+        {["overview", "log entry", "all entries", "mileage costs", "availability"].map(t => (
           <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
@@ -1016,6 +1113,92 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       {tab === "mileage costs" && (
         <MileageCostReport entries={entries} drivers={drivers} allProfiles={allProfiles} thisMonth={thisMonth} wkStart={wkStart} wkEnd={wkEnd} />
       )}
+
+      {tab === "availability" && (
+        <AdminAvailability drivers={drivers} />
+      )}
+    </div>
+  );
+}
+
+// ─── ADMIN AVAILABILITY ───────────────────────────────────────────────────────
+function AdminAvailability({ drivers }) {
+  const weekStart = getNextWeekStart().toISOString().slice(0, 10);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from("availability").select("*").eq("week_start", weekStart);
+      setRecords(data ?? []);
+      setLoading(false);
+    }
+    load();
+  }, [weekStart]);
+
+  const submitted = new Set(records.map(r => r.driver_id));
+
+  if (loading) return <div style={{ color: "var(--muted)", padding: 24 }}>Loading...</div>;
+
+  return (
+    <div className="fade-in">
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "var(--muted)", marginBottom: 4 }}>
+        Week of {getNextWeekLabel()}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 20 }}>
+        {submitted.size} of {drivers.length} drivers have submitted availability
+      </div>
+
+      {/* Not submitted warning */}
+      {drivers.filter(d => !submitted.has(d.id)).length > 0 && (
+        <div style={{ background: "rgba(255,82,82,0.08)", border: "1px solid rgba(255,82,82,0.25)", borderRadius: 8, padding: "12px 16px", marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--danger)", marginBottom: 8 }}>⚠ HAVEN'T SUBMITTED</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {drivers.filter(d => !submitted.has(d.id)).map(d => (
+              <span key={d.id} style={{ background: "rgba(255,82,82,0.15)", borderRadius: 4, padding: "3px 10px", fontSize: 12, color: "var(--danger)" }}>{d.name}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Availability grid */}
+      <div className="table-wrap">
+        <div className="table-head">
+          <div className="table-head-title">Driver Availability</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Driver</th>
+              {DAY_LABELS.map(d => <th key={d}>{d}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {drivers.map(driver => {
+              const rec = records.find(r => r.driver_id === driver.id);
+              return (
+                <tr key={driver.id}>
+                  <td style={{ fontWeight: 600 }}>{driver.name}</td>
+                  {DAYS.map(d => (
+                    <td key={d} style={{ textAlign: "center" }}>
+                      {!rec ? (
+                        <span style={{ color: "var(--muted)", fontSize: 11 }}>—</span>
+                      ) : rec[d] ? (
+                        <div>
+                          <span style={{ color: "var(--success)", fontWeight: 700, fontSize: 14 }}>✓</span>
+                          {rec[`${d}_done_by`] && <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{rec[`${d}_done_by`].slice(0, 5)}</div>}
+                        </div>
+                      ) : (
+                        <span style={{ color: "var(--danger)", fontSize: 14 }}>✗</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
