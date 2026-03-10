@@ -395,28 +395,47 @@ const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function DriverAvailability({ driver }) {
   const weekStart = getNextWeekStart().toISOString().slice(0, 10);
-  const [avail, setAvail] = useState({ sun: false, mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun_done_by: "", mon_done_by: "", tue_done_by: "", wed_done_by: "", thu_done_by: "", fri_done_by: "", sat_done_by: "" });
+  const emptyAvail = { sun: false, mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun_done_by: "", mon_done_by: "", tue_done_by: "", wed_done_by: "", thu_done_by: "", fri_done_by: "", sat_done_by: "" };
+  const [avail, setAvail] = useState(emptyAvail);
+  const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const canSubmit = isSaturday();
+  const [existingRecord, setExistingRecord] = useState(null);
+
+  const today = new Date().getDay();
+  const isSat = today === 6;
+  const isAfterSat = !isSat; // any day that isn't Saturday requires reason
+  const canSubmit = true; // always allow submission, but flag post-Saturday
+  const isAmend = existingRecord && isAfterSat;
 
   useEffect(() => {
     async function load() {
       const { data } = await supabase.from("availability").select("*").eq("driver_id", driver.id).eq("week_start", weekStart).single();
-      if (data) setAvail({ sun: data.sun, mon: data.mon, tue: data.tue, wed: data.wed, thu: data.thu, fri: data.fri, sat: data.sat, sun_done_by: data.sun_done_by ?? "", mon_done_by: data.mon_done_by ?? "", tue_done_by: data.tue_done_by ?? "", wed_done_by: data.wed_done_by ?? "", thu_done_by: data.thu_done_by ?? "", fri_done_by: data.fri_done_by ?? "", sat_done_by: data.sat_done_by ?? "" });
+      if (data) {
+        setExistingRecord(data);
+        setAvail({ sun: data.sun, mon: data.mon, tue: data.tue, wed: data.wed, thu: data.thu, fri: data.fri, sat: data.sat, sun_done_by: data.sun_done_by ?? "", mon_done_by: data.mon_done_by ?? "", tue_done_by: data.tue_done_by ?? "", wed_done_by: data.wed_done_by ?? "", thu_done_by: data.thu_done_by ?? "", fri_done_by: data.fri_done_by ?? "", sat_done_by: data.sat_done_by ?? "" });
+      }
       setLoading(false);
     }
     load();
   }, [driver.id, weekStart]);
 
   async function handleSave() {
+    if (isAmend && !reason.trim()) return;
     setSaving(true);
-    const payload = { driver_id: driver.id, week_start: weekStart, ...avail };
+    const payload = {
+      driver_id: driver.id,
+      week_start: weekStart,
+      ...avail,
+      updated_after_saturday: isAfterSat ? true : (existingRecord?.updated_after_saturday ?? false),
+      update_reason: isAfterSat ? reason.trim() : (existingRecord?.update_reason ?? null),
+    };
     DAYS.forEach(d => { if (!avail[d]) payload[`${d}_done_by`] = null; });
     await supabase.from("availability").upsert(payload, { onConflict: "driver_id,week_start" });
     setSaving(false);
     setSaved(true);
+    setReason("");
     setTimeout(() => setSaved(false), 3000);
   }
 
@@ -425,36 +444,48 @@ function DriverAvailability({ driver }) {
   return (
     <div className="form-card fade-in">
       <div className="form-card-title">Availability — {getNextWeekLabel()}</div>
-      {!canSubmit && (
-        <div style={{ background: "rgba(255,184,0,0.08)", border: "1px solid rgba(255,184,0,0.2)", borderRadius: 6, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "var(--accent)" }}>
-          Availability can only be submitted on Saturdays. Check back this Saturday!
+
+      {existingRecord && (
+        <div style={{ background: "rgba(0,200,100,0.08)", border: "1px solid rgba(0,200,100,0.2)", borderRadius: 6, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "var(--success)" }}>
+          ✓ You submitted availability for this week on {new Date(existingRecord.submitted_at).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}.
+          {existingRecord.updated_after_saturday && <span style={{ color: "var(--accent)", marginLeft: 6 }}>⚠ Amended after Saturday — Reason: "{existingRecord.update_reason}"</span>}
         </div>
       )}
+
+      {isAmend && (
+        <div style={{ background: "rgba(255,184,0,0.08)", border: "1px solid rgba(255,184,0,0.25)", borderRadius: 6, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "var(--accent)" }}>
+          ⚠ You are updating your availability after Saturday. Your manager will be notified this was changed and you must provide a reason.
+        </div>
+      )}
+
       <div style={{ display: "grid", gap: 12, marginTop: 8 }}>
         {DAYS.map((d, i) => (
-          <div key={d} style={{ display: "grid", gridTemplateColumns: "120px 1fr", alignItems: "center", gap: 12, opacity: canSubmit ? 1 : 0.5 }}>
+          <div key={d} style={{ display: "grid", gridTemplateColumns: "120px 1fr", alignItems: "center", gap: 12 }}>
             <div className="checkbox-row" style={{ margin: 0 }}>
-              <input type="checkbox" id={`avail-${d}`} checked={avail[d]} disabled={!canSubmit} onChange={e => setAvail(a => ({ ...a, [d]: e.target.checked }))} />
+              <input type="checkbox" id={`avail-${d}`} checked={avail[d]} onChange={e => setAvail(a => ({ ...a, [d]: e.target.checked }))} />
               <label htmlFor={`avail-${d}`} style={{ fontSize: 14, fontWeight: 600 }}>{DAY_LABELS[i]}</label>
             </div>
-            {avail[d] && canSubmit && (
+            {avail[d] && (
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <label style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>Done by</label>
                 <input type="time" value={avail[`${d}_done_by`]} onChange={e => setAvail(a => ({ ...a, [`${d}_done_by`]: e.target.value }))} style={{ width: 120 }} />
               </div>
             )}
-            {avail[d] && !canSubmit && avail[`${d}_done_by`] && (
-              <span style={{ fontSize: 12, color: "var(--muted)" }}>Done by {avail[`${d}_done_by`]}</span>
-            )}
           </div>
         ))}
       </div>
-      {canSubmit && (
-        <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Submit Availability →"}
-        </button>
+
+      {isAmend && (
+        <div className="field" style={{ marginTop: 20 }}>
+          <label>Reason for change <span style={{ color: "var(--danger)" }}>*</span></label>
+          <input type="text" placeholder="e.g. Doctor appointment on Monday" value={reason} onChange={e => setReason(e.target.value)} />
+        </div>
       )}
-      {saved && <div className="success-toast">✓ Availability submitted!</div>}
+
+      <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={handleSave} disabled={saving || (isAmend && !reason.trim())}>
+        {saving ? "Saving..." : existingRecord ? "Update Availability →" : "Submit Availability →"}
+      </button>
+      {saved && <div className="success-toast">✓ Availability {isAmend ? "updated" : "submitted"}!</div>}
     </div>
   );
 }
@@ -1178,7 +1209,15 @@ function AdminAvailability({ drivers }) {
               const rec = records.find(r => r.driver_id === driver.id);
               return (
                 <tr key={driver.id}>
-                  <td style={{ fontWeight: 600 }}>{driver.name}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    {driver.name}
+                    {rec?.updated_after_saturday && (
+                      <span title={`Amended — Reason: ${rec.update_reason}`} style={{ marginLeft: 6, color: "var(--accent)", fontSize: 12, cursor: "help" }}>⚠ amended</span>
+                    )}
+                    {rec?.updated_after_saturday && rec.update_reason && (
+                      <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 400, marginTop: 2 }}>"{rec.update_reason}"</div>
+                    )}
+                  </td>
                   {DAYS.map(d => (
                     <td key={d} style={{ textAlign: "center" }}>
                       {!rec ? (
