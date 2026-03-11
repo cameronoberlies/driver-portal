@@ -936,9 +936,11 @@ function LiveDriversMap({ drivers }) {
   async function fetchLocations(map) {
     setLoading(true);
     const { data } = await supabase.from("driver_locations").select("*");
-    setLocations(data ?? []);
+    const TWO_HOURS = 2 * 60 * 60 * 1000;
+    const visible = (data ?? []).filter(l => (Date.now() - new Date(l.updated_at).getTime()) < TWO_HOURS);
+    setLocations(visible);
     setLastRefresh(new Date());
-    updateMarkers(data ?? [], map);
+    updateMarkers(visible, map);
     setLoading(false);
   }
 
