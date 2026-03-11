@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
@@ -884,15 +884,15 @@ function MileageCostReport({ entries, drivers, allProfiles, thisMonth, wkStart, 
 
 // ─── LIVE DRIVERS MAP ─────────────────────────────────────────────────────────
 function LiveDriversMap({ drivers }) {
-  const mapRef = React.useRef(null);
-  const mapInstanceRef = React.useRef(null);
-  const markersRef = React.useRef({});
-  const [locations, setLocations] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [lastRefresh, setLastRefresh] = React.useState(new Date());
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markersRef = useRef({});
+  const [locations, setLocations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
 
   // Load Leaflet CSS + JS dynamically
-  React.useEffect(() => {
+  useEffect(() => {
     if (!document.getElementById("leaflet-css")) {
       const link = document.createElement("link");
       link.id = "leaflet-css";
