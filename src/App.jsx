@@ -1440,7 +1440,7 @@ function AdminAvailability({ drivers }) {
                       ) : rec[d] ? (
                         <div>
                           <span style={{ color: "var(--success)", fontWeight: 700, fontSize: 14 }}>✓</span>
-                          {rec[`${d}_done_by`] && <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{rec[`${d}_done_by`].slice(0, 5)}</div>}
+                          {rec[`${d}_done_by`] && <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{(() => { const [h, m] = rec[`${d}_done_by`].slice(0,5).split(":"); const hr = parseInt(h); return `${hr % 12 || 12}:${m}${hr >= 12 ? "pm" : "am"}`; })()}</div>}
                         </div>
                       ) : (
                         <span style={{ color: "var(--danger)", fontSize: 14 }}>✗</span>
