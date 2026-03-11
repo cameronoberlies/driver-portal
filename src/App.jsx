@@ -1096,6 +1096,102 @@ function LiveDriversMap({ drivers }) {
 }
 
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
+// ─── PENDING ENTRY ROW ────────────────────────────────────────────────────────
+function PendingEntryRow({ entry, driverName, onComplete }) {
+  const [expanded, setExpanded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    pay: "",
+    hours: "",
+    actual_cost: String(entry.actual_cost ?? ""),
+    estimated_cost: String(entry.estimated_cost ?? ""),
+    crm_id: "",
+    carpage_link: entry.carpage_link ?? "",
+    recon_missed: entry.recon_missed ?? false,
+  });
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function handleComplete() {
+    if (!form.pay || !form.crm_id) return;
+    setSaving(true);
+    const { data, error } = await supabase.from("entries").update({
+      pay: Number(form.pay),
+      hours: form.hours ? Number(form.hours) : null,
+      actual_cost: form.actual_cost ? Number(form.actual_cost) : 0,
+      estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
+      crm_id: form.crm_id,
+      carpage_link: form.carpage_link || null,
+      recon_missed: form.recon_missed,
+    }).eq("id", entry.id).select().single();
+    setSaving(false);
+    if (!error && data) onComplete(data);
+  }
+
+  return (
+    <div style={{
+      border: "1px solid var(--border)", marginBottom: 10,
+      borderLeft: "3px solid #3b8cf7", background: "var(--bg)",
+    }}>
+      {/* Summary row */}
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 16px", cursor: "pointer" }}
+        onClick={() => setExpanded(x => !x)}
+      >
+        <div style={{ flex: 1 }}>
+          <span style={{ fontWeight: 700, color: "var(--text)" }}>{driverName}</span>
+          <span style={{ marginLeft: 12, fontSize: 12, color: "var(--muted)" }}>{formatDate(entry.date)}</span>
+          <span style={{ marginLeft: 12, fontSize: 12, color: "var(--muted)" }}>{entry.city}</span>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--muted)", display: "flex", gap: 16 }}>
+          {entry.miles > 0 && <span>{entry.miles} mi</span>}
+          {entry.drive_time > 0 && <span>{entry.drive_time}h drive</span>}
+        </div>
+        <span style={{ fontSize: 18, color: "var(--accent)" }}>{expanded ? "▲" : "▼"}</span>
+      </div>
+
+      {/* Expandable form */}
+      {expanded && (
+        <div style={{ padding: "0 16px 16px" }}>
+          <div className="form-grid" style={{ marginTop: 0 }}>
+            <div className="field">
+              <label>Pay Amount ($) *</label>
+              <input type="number" placeholder="0.00" value={form.pay} onChange={e => set("pay", e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Hours Worked</label>
+              <input type="number" placeholder="0" value={form.hours} onChange={e => set("hours", e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Actual Cost ($)</label>
+              <input type="number" placeholder="0.00" value={form.actual_cost} onChange={e => set("actual_cost", e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Estimated Cost ($)</label>
+              <input type="number" placeholder="0.00" value={form.estimated_cost} onChange={e => set("estimated_cost", e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Carpage ID *</label>
+              <input type="text" placeholder="CP-XXXX" value={form.crm_id} onChange={e => set("crm_id", e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Carpage Link</label>
+              <input type="url" placeholder="https://..." value={form.carpage_link} onChange={e => set("carpage_link", e.target.value)} />
+            </div>
+          </div>
+          <div className="checkbox-row">
+            <input type="checkbox" id={`recon-${entry.id}`} checked={form.recon_missed} onChange={e => set("recon_missed", e.target.checked)} />
+            <label htmlFor={`recon-${entry.id}`} style={{ color: form.recon_missed ? "var(--danger)" : "var(--text)" }}>Recon was missed</label>
+          </div>
+          <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={handleComplete} disabled={saving || !form.pay || !form.crm_id}>
+            {saving ? "Saving..." : "Complete Entry →"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminDashboard({ allProfiles, entries, setEntries }) {
   const drivers = allProfiles.filter(u => u.role === "driver");
   const [tab, setTab] = useState("overview");
@@ -1222,66 +1318,96 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       )}
 
       {tab === "log entry" && (
-        <div className="form-card fade-in">
-          <div className="form-card-title">Log Daily Entry</div>
-          {drivers.length === 0 ? (
-            <div style={{ color: "var(--muted)", fontSize: 14 }}>No drivers in the system yet. Add driver profiles first.</div>
-          ) : (
-            <>
-              <div className="form-grid">
-                <div className="field">
-                  <label>Driver</label>
-                  <select value={form.driver_id} onChange={e => setForm(f => ({ ...f, driver_id: e.target.value }))}>
-                    {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
+        <div className="fade-in">
+          {/* Pending driver submissions */}
+          {(() => {
+            const pending = entries.filter(e => (!e.crm_id || e.crm_id === "") && (e.miles > 0 || e.drive_time > 0));
+            if (pending.length === 0) return null;
+            return (
+              <div className="form-card" style={{ marginBottom: 24, borderLeft: "3px solid var(--accent)" }}>
+                <div className="form-card-title" style={{ marginBottom: 4 }}>
+                  Pending Driver Submissions
+                  <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 600, color: "var(--accent)", background: "rgba(232,180,74,0.12)", padding: "2px 8px", borderRadius: 4 }}>{pending.length}</span>
                 </div>
-                <div className="field">
-                  <label>Date</label>
-                  <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
-                </div>
-                <div className="field">
-                  <label>Pay Amount ($)</label>
-                  <input type="number" placeholder="0.00" value={form.pay} onChange={e => setForm(f => ({ ...f, pay: e.target.value }))} />
-                </div>
-                <div className="field">
-                  <label>Hours Worked</label>
-                  <input type="number" placeholder="0" value={form.hours} onChange={e => setForm(f => ({ ...f, hours: e.target.value }))} />
-                </div>
-                <div className="field">
-                  <label>Miles Driven</label>
-                  <input type="number" placeholder="0" value={form.miles} onChange={e => setForm(f => ({ ...f, miles: e.target.value }))} />
-                </div>
-                <div className="field">
-                  <label>Actual Cost ($)</label>
-                  <input type="number" placeholder="0.00" value={form.actual_cost} onChange={e => setForm(f => ({ ...f, actual_cost: e.target.value }))} />
-                </div>
-                <div className="field">
-                  <label>Estimated Cost ($)</label>
-                  <input type="number" placeholder="0.00" value={form.estimated_cost} onChange={e => setForm(f => ({ ...f, estimated_cost: e.target.value }))} />
-                </div>
-                <div className="field">
-                  <label>City</label>
-                  <input type="text" placeholder="Charlotte" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
-                </div>
-                <div className="field">
-                  <label>Carpage ID</label>
-                  <input type="text" placeholder="CP-XXXX" value={form.crm_id} onChange={e => setForm(f => ({ ...f, crm_id: e.target.value }))} />
-                </div>
-                <div className="field" style={{ gridColumn: "1 / -1" }}>
-                  <label>Carpage Link</label>
-                  <input type="url" placeholder="https://..." value={form.carpage_link} onChange={e => setForm(f => ({ ...f, carpage_link: e.target.value }))} />
-                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}>These trips were submitted by drivers via the app. Fill in the missing details below.</div>
+                {pending.map(e => {
+                  const driver = allProfiles.find(p => p.id === e.driver_id);
+                  return (
+                    <PendingEntryRow
+                      key={e.id}
+                      entry={e}
+                      driverName={driver?.name ?? "Unknown"}
+                      onComplete={updated => setEntries(prev => prev.map(x => x.id === updated.id ? updated : x))}
+                    />
+                  );
+                })}
               </div>
-              <div className="checkbox-row">
-                <input type="checkbox" id="recon" checked={form.recon_missed} onChange={e => setForm(f => ({ ...f, recon_missed: e.target.checked }))} />
-                <label htmlFor="recon" style={{ color: form.recon_missed ? "var(--danger)" : "var(--text)" }}>Recon was missed on this vehicle</label>
-              </div>
-              <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={handleSubmit} disabled={submitting}>
-                {submitting ? "Saving..." : "Save Entry →"}
-              </button>
-              {saved && <div className="success-toast">✓ Entry saved to database</div>}
-            </>
-          )}
+            );
+          })()}
+
+          {/* Manual entry form */}
+          <div className="form-card">
+            <div className="form-card-title">New Manual Entry</div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}>For trips not tracked via the app.</div>
+            {drivers.length === 0 ? (
+              <div style={{ color: "var(--muted)", fontSize: 14 }}>No drivers in the system yet. Add driver profiles first.</div>
+            ) : (
+              <>
+                <div className="form-grid">
+                  <div className="field">
+                    <label>Driver</label>
+                    <select value={form.driver_id} onChange={e => setForm(f => ({ ...f, driver_id: e.target.value }))}>
+                      {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Date</label>
+                    <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label>Pay Amount ($)</label>
+                    <input type="number" placeholder="0.00" value={form.pay} onChange={e => setForm(f => ({ ...f, pay: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label>Hours Worked</label>
+                    <input type="number" placeholder="0" value={form.hours} onChange={e => setForm(f => ({ ...f, hours: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label>Miles Driven</label>
+                    <input type="number" placeholder="0" value={form.miles} onChange={e => setForm(f => ({ ...f, miles: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label>Actual Cost ($)</label>
+                    <input type="number" placeholder="0.00" value={form.actual_cost} onChange={e => setForm(f => ({ ...f, actual_cost: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label>Estimated Cost ($)</label>
+                    <input type="number" placeholder="0.00" value={form.estimated_cost} onChange={e => setForm(f => ({ ...f, estimated_cost: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label>City</label>
+                    <input type="text" placeholder="Charlotte" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
+                  </div>
+                  <div className="field">
+                    <label>Carpage ID</label>
+                    <input type="text" placeholder="CP-XXXX" value={form.crm_id} onChange={e => setForm(f => ({ ...f, crm_id: e.target.value }))} />
+                  </div>
+                  <div className="field" style={{ gridColumn: "1 / -1" }}>
+                    <label>Carpage Link</label>
+                    <input type="url" placeholder="https://..." value={form.carpage_link} onChange={e => setForm(f => ({ ...f, carpage_link: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="checkbox-row">
+                  <input type="checkbox" id="recon" checked={form.recon_missed} onChange={e => setForm(f => ({ ...f, recon_missed: e.target.checked }))} />
+                  <label htmlFor="recon" style={{ color: form.recon_missed ? "var(--danger)" : "var(--text)" }}>Recon was missed on this vehicle</label>
+                </div>
+                <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={handleSubmit} disabled={submitting}>
+                  {submitting ? "Saving..." : "Save Entry →"}
+                </button>
+                {saved && <div className="success-toast">✓ Entry saved to database</div>}
+              </>
+            )}
+          </div>
         </div>
       )}
 
