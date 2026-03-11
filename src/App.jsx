@@ -402,24 +402,28 @@ function DriverAvailability({ driver }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [existingRecord, setExistingRecord] = useState(null);
+  const [loadTrigger, setLoadTrigger] = useState(0);
 
   const today = new Date().getDay();
   const isSat = today === 6;
-  const isAfterSat = !isSat; // any day that isn't Saturday requires reason
-  const canSubmit = true; // always allow submission, but flag post-Saturday
+  const isAfterSat = !isSat;
   const isAmend = existingRecord && isAfterSat;
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from("availability").select("*").eq("driver_id", driver.id).eq("week_start", weekStart).single();
+      setLoading(true);
+      const { data } = await supabase.from("availability").select("*").eq("driver_id", driver.id).eq("week_start", weekStart).maybeSingle();
       if (data) {
         setExistingRecord(data);
         setAvail({ sun: data.sun, mon: data.mon, tue: data.tue, wed: data.wed, thu: data.thu, fri: data.fri, sat: data.sat, sun_done_by: data.sun_done_by ?? "", mon_done_by: data.mon_done_by ?? "", tue_done_by: data.tue_done_by ?? "", wed_done_by: data.wed_done_by ?? "", thu_done_by: data.thu_done_by ?? "", fri_done_by: data.fri_done_by ?? "", sat_done_by: data.sat_done_by ?? "" });
+      } else {
+        setExistingRecord(null);
+        setAvail(emptyAvail);
       }
       setLoading(false);
     }
     load();
-  }, [driver.id, weekStart]);
+  }, [driver.id, weekStart, loadTrigger]);
 
   async function handleSave() {
     if (isAmend && !reason.trim()) return;
@@ -436,6 +440,7 @@ function DriverAvailability({ driver }) {
     setSaving(false);
     setSaved(true);
     setReason("");
+    setLoadTrigger(t => t + 1);
     setTimeout(() => setSaved(false), 3000);
   }
 
