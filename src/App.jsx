@@ -882,6 +882,213 @@ function MileageCostReport({ entries, drivers, allProfiles, thisMonth, wkStart, 
   );
 }
 
+// ─── LIVE DRIVERS MAP ─────────────────────────────────────────────────────────
+function LiveDriversMap({ drivers }) {
+  const mapRef = React.useRef(null);
+  const mapInstanceRef = React.useRef(null);
+  const markersRef = React.useRef({});
+  const [locations, setLocations] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [lastRefresh, setLastRefresh] = React.useState(new Date());
+
+  // Load Leaflet CSS + JS dynamically
+  React.useEffect(() => {
+    if (!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+    }
+    if (!document.getElementById("leaflet-js")) {
+      const script = document.createElement("script");
+      script.id = "leaflet-js";
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.onload = () => initMap();
+      document.head.appendChild(script);
+    } else if (window.L) {
+      initMap();
+    }
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  function initMap() {
+    if (!mapRef.current || mapInstanceRef.current) return;
+    const map = window.L.map(mapRef.current, { zoomControl: true, attributionControl: false }).setView([36.0, -80.0], 6);
+    window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 19,
+    }).addTo(map);
+    mapInstanceRef.current = map;
+    fetchLocations(map);
+  }
+
+  async function fetchLocations(map) {
+    setLoading(true);
+    const { data } = await supabase.from("driver_locations").select("*");
+    setLocations(data ?? []);
+    setLastRefresh(new Date());
+    updateMarkers(data ?? [], map);
+    setLoading(false);
+  }
+
+  function updateMarkers(locs, map) {
+    if (!map || !window.L) return;
+
+    // Clear old markers
+    Object.values(markersRef.current).forEach(m => m.remove());
+    markersRef.current = {};
+
+    if (locs.length === 0) return;
+
+    const bounds = [];
+    locs.forEach(loc => {
+      const driver = drivers.find(d => d.id === loc.driver_id);
+      const name = driver?.name ?? "Unknown Driver";
+      const age = Math.floor((new Date() - new Date(loc.updated_at)) / 1000);
+      const ageLabel = age < 60 ? `${age}s ago` : age < 3600 ? `${Math.floor(age / 60)}m ago` : `${Math.floor(age / 3600)}h ago`;
+      const isRecent = age < 120; // green if updated within 2 min
+
+      const icon = window.L.divIcon({
+        className: "",
+        html: `
+          <div style="
+            background: ${isRecent ? "#4ae885" : "#f5a623"};
+            border: 2px solid #0d0f12;
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            box-shadow: 0 0 ${isRecent ? "8px #4ae885" : "6px #f5a623"};
+          "></div>
+        `,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      });
+
+      const marker = window.L.marker([loc.latitude, loc.longitude], { icon })
+        .bindPopup(`
+          <div style="font-family: 'Barlow Condensed', sans-serif; min-width: 140px; background: #161a20; color: #e8ecf0; border: none;">
+            <div style="font-size: 16px; font-weight: 800; letter-spacing: 1px; margin-bottom: 4px;">${name}</div>
+            <div style="font-size: 11px; color: #6b7585; letter-spacing: 1px;">LAST UPDATE</div>
+            <div style="font-size: 13px; font-weight: 600; color: ${isRecent ? "#4ae885" : "#f5a623"};">${ageLabel}</div>
+            <div style="font-size: 10px; color: #444; margin-top: 6px;">${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}</div>
+          </div>
+        `, {
+          className: "dark-popup"
+        })
+        .addTo(map);
+
+      markersRef.current[loc.driver_id] = marker;
+      bounds.push([loc.latitude, loc.longitude]);
+    });
+
+    if (bounds.length > 0) {
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 12 });
+    }
+  }
+
+  function handleRefresh() {
+    if (mapInstanceRef.current) fetchLocations(mapInstanceRef.current);
+  }
+
+  const activeLocs = locations.filter(l => {
+    const age = (new Date() - new Date(l.updated_at)) / 1000;
+    return age < 300; // active within 5 min
+  });
+
+  return (
+    <div className="fade-in">
+      <style>{`
+        .leaflet-popup-content-wrapper { background: #161a20 !important; border: 1px solid #2a3140 !important; border-radius: 0 !important; box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important; }
+        .leaflet-popup-tip { background: #161a20 !important; }
+        .leaflet-popup-content { margin: 12px 16px !important; }
+        .leaflet-container { background: #0d0f12; }
+      `}</style>
+
+      {/* Status bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ae885", boxShadow: "0 0 6px #4ae885" }} />
+            <span style={{ fontSize: 12, color: "#4ae885", fontWeight: 700, letterSpacing: 1 }}>{activeLocs.length} ACTIVE</span>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>
+            {locations.length === 0
+              ? "No drivers currently driving"
+              : `${locations.length} driver${locations.length !== 1 ? "s" : ""} tracked`}
+          </div>
+          <div style={{ fontSize: 11, color: "#444" }}>Last refresh: {lastRefresh.toLocaleTimeString()}</div>
+        </div>
+        <button className="btn btn-ghost" style={{ padding: "6px 14px", fontSize: 12 }} onClick={handleRefresh} disabled={loading}>
+          {loading ? "Refreshing..." : "↻ Refresh"}
+        </button>
+      </div>
+
+      {/* Driver status pills */}
+      {locations.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+          {locations.map(loc => {
+            const driver = drivers.find(d => d.id === loc.driver_id);
+            const age = Math.floor((new Date() - new Date(loc.updated_at)) / 1000);
+            const isRecent = age < 120;
+            const ageLabel = age < 60 ? `${age}s ago` : age < 3600 ? `${Math.floor(age / 60)}m ago` : `${Math.floor(age / 3600)}h ago`;
+            return (
+              <div key={loc.driver_id} style={{
+                background: "var(--surface)", border: `1px solid ${isRecent ? "rgba(74,232,133,0.3)" : "var(--border)"}`,
+                borderRadius: 4, padding: "6px 12px", display: "flex", alignItems: "center", gap: 8
+              }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: isRecent ? "#4ae885" : "#f5a623" }} />
+                <span style={{ fontSize: 12, fontWeight: 700 }}>{driver?.name ?? "Unknown"}</span>
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>{ageLabel}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Map */}
+      <div style={{ position: "relative", borderRadius: 0, overflow: "hidden", border: "1px solid var(--border)" }}>
+        <div ref={mapRef} style={{ height: 500, width: "100%", background: "#0d0f12" }} />
+        {loading && (
+          <div style={{
+            position: "absolute", inset: 0, background: "rgba(13,15,18,0.7)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 13, letterSpacing: 2, color: "var(--muted)", fontWeight: 700
+          }}>
+            LOADING MAP...
+          </div>
+        )}
+        {!loading && locations.length === 0 && (
+          <div style={{
+            position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: 8
+          }}>
+            <div style={{ fontSize: 32, opacity: 0.2 }}>🚗</div>
+            <div style={{ fontSize: 13, letterSpacing: 2, color: "var(--muted)", fontWeight: 700 }}>NO ACTIVE DRIVERS</div>
+            <div style={{ fontSize: 12, color: "#333" }}>Drivers appear here when a trip is in progress</div>
+          </div>
+        )}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 20, marginTop: 10, fontSize: 11, color: "var(--muted)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ae885", boxShadow: "0 0 5px #4ae885" }} />
+          <span>Updated &lt; 2 min ago</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f5a623", boxShadow: "0 0 5px #f5a623" }} />
+          <span>Updated &gt; 2 min ago</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
 function AdminDashboard({ allProfiles, entries, setEntries }) {
   const drivers = allProfiles.filter(u => u.role === "driver");
@@ -974,7 +1181,7 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       <PayPeriodBanner />
 
       <div className="tabs">
-        {["overview", "log entry", "all entries", "mileage costs", "availability"].map(t => (
+        {["overview", "log entry", "all entries", "mileage costs", "availability", "live drivers"].map(t => (
           <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
@@ -1148,6 +1355,9 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       {tab === "availability" && (
         <AdminAvailability drivers={drivers} />
       )}
+      {tab === "live drivers" && (
+        <LiveDriversMap drivers={drivers} />
+    )}
     </div>
   );
 }
