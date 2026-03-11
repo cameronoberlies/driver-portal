@@ -923,14 +923,15 @@ function LiveDriversMap({ drivers }) {
   }, []);
 
   function initMap() {
-    if (!mapRef.current || mapInstanceRef.current) return;
-    const map = window.L.map(mapRef.current, { zoomControl: true, attributionControl: false }).setView([36.0, -80.0], 6);
-    window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      maxZoom: 19,
-    }).addTo(map);
-    mapInstanceRef.current = map;
-    fetchLocations(map);
-  }
+  if (!mapRef.current || mapInstanceRef.current) return;
+  const map = window.L.map(mapRef.current, { zoomControl: true, attributionControl: false }).setView([36.0, -80.0], 6);
+  map.scrollWheelZoom.disable();
+  window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    maxZoom: 19,
+  }).addTo(map);
+  mapInstanceRef.current = map;
+  fetchLocations(map);
+}
 
   async function fetchLocations(map) {
     setLoading(true);
