@@ -1,67 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  getWeekBounds,
+  formatDate,
+  formatCurrency,
+  getMonth,
+  getNextWeekStart,
+  getNextWeekLabel,
+  formatPayPeriod,
+  calcReconStreak,
+  buildCSVContent,
+} from "./utils.js";
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const supabase = createClient(
   "https://yincjogkjvotupzgetqg.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las"
 );
-
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-function getWeekBounds(date = new Date()) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diffToWed = day >= 3 ? day - 3 : day + 4;
-  const wed = new Date(d);
-  wed.setDate(d.getDate() - diffToWed);
-  wed.setHours(0, 0, 0, 0);
-  const tue = new Date(wed);
-  tue.setDate(wed.getDate() + 6);
-  tue.setHours(23, 59, 59, 999);
-  return { start: wed, end: tue };
-}
-
-function formatDate(dateStr) {
-  const [y, m, d] = dateStr.split("-");
-  return `${m}/${d}/${y}`;
-}
-
-function formatCurrency(n) {
-  return "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2 });
-}
-
-function getMonth(dateStr) { return dateStr.slice(0, 7); }
-
-// Returns the upcoming Sunday (start of next availability week)
-function getNextWeekStart() {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun, 6=Sat
-  const daysUntilSun = day === 0 ? 7 : 7 - day;
-  const sun = new Date(now);
-  sun.setDate(now.getDate() + daysUntilSun);
-  sun.setHours(0, 0, 0, 0);
-  return sun;
-}
-
-function getNextWeekLabel() {
-  const sun = getNextWeekStart();
-  const sat = new Date(sun);
-  sat.setDate(sun.getDate() + 6);
-  const opts = { month: "short", day: "numeric" };
-  return `${sun.toLocaleDateString("en-US", opts)} – ${sat.toLocaleDateString("en-US", { ...opts, year: "numeric" })}`;
-}
-
-function isSaturday() {
-  return new Date().getDay() === 6;
-}
-
-function formatPayPeriod() {
-  const { start, end } = getWeekBounds(new Date());
-  const opts = { month: "short", day: "numeric" };
-  const s = start.toLocaleDateString("en-US", opts);
-  const e = end.toLocaleDateString("en-US", { ...opts, year: "numeric" });
-  return `Pay Period: ${s} – ${e}`;
-}
 
 function PayPeriodBanner() {
   return (
@@ -75,16 +30,6 @@ function PayPeriodBanner() {
       <span style={{ fontSize: 14 }}>📅</span> {formatPayPeriod()}
     </div>
   );
-}
-
-function calcReconStreak(entries) {
-  const sorted = [...entries].sort((a, b) => new Date(b.date) - new Date(a.date));
-  let streak = 0;
-  for (const e of sorted) {
-    if (e.recon_missed) break;
-    streak++;
-  }
-  return streak;
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
@@ -496,7 +441,7 @@ function DriverAvailability({ driver }) {
 }
 
 // ─── DRIVER DASHBOARD ─────────────────────────────────────────────────────────
-function DriverDashboard({ driver, entries, tab, setTab }) {
+function DriverDashboard({ driver, entries, trips, setTrips, tab, setTab }) {
   const now = new Date();
   const { start: wkStart, end: wkEnd } = getWeekBounds(now);
   const thisMonth = now.toISOString().slice(0, 7);
@@ -526,7 +471,7 @@ function DriverDashboard({ driver, entries, tab, setTab }) {
       <PayPeriodBanner />
 
       <div className="tabs">
-        {["overview", "weekly report", "monthly report", "availability"].map(t => (
+        {["overview", "my trips", "weekly report", "monthly report", "availability"].map(t => (
           <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
@@ -650,6 +595,10 @@ function DriverDashboard({ driver, entries, tab, setTab }) {
         </div>
       )}
 
+      {tab === "my trips" && (
+        <DriverTrips driver={driver} trips={trips} setTrips={setTrips} />
+      )}
+
       {tab === "availability" && (
         <DriverAvailability driver={driver} />
       )}
@@ -748,26 +697,7 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
 
 // ─── CSV EXPORT HELPER ────────────────────────────────────────────────────────
 function exportCSV(entries, profiles) {
-  const headers = ["Driver", "Date", "City", "Carpage ID", "Carpage Link", "Pay", "Hours", "Miles", "Actual Cost", "Estimated Cost", "Recon Missed"];
-  const rows = [...entries]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .map(e => {
-      const driver = profiles.find(p => p.id === e.driver_id);
-      return [
-        driver?.name ?? "",
-        e.date,
-        e.city,
-        e.crm_id,
-        e.carpage_link ?? "",
-        e.pay,
-        e.hours,
-        e.miles ?? 0,
-        e.actual_cost ?? 0,
-        e.estimated_cost ?? 0,
-        e.recon_missed ? "Yes" : "No",
-      ];
-    });
-  const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+  const csv = buildCSVContent(entries, profiles);
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -923,24 +853,21 @@ function LiveDriversMap({ drivers }) {
   }, []);
 
   function initMap() {
-  if (!mapRef.current || mapInstanceRef.current) return;
-  const map = window.L.map(mapRef.current, { zoomControl: true, attributionControl: false }).setView([36.0, -80.0], 6);
-  map.scrollWheelZoom.disable();
-  window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 19,
-  }).addTo(map);
-  mapInstanceRef.current = map;
-  fetchLocations(map);
-}
+    if (!mapRef.current || mapInstanceRef.current) return;
+    const map = window.L.map(mapRef.current, { zoomControl: true, attributionControl: false }).setView([36.0, -80.0], 6);
+    window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 19,
+    }).addTo(map);
+    mapInstanceRef.current = map;
+    fetchLocations(map);
+  }
 
   async function fetchLocations(map) {
     setLoading(true);
     const { data } = await supabase.from("driver_locations").select("*");
-    const TWO_HOURS = 2 * 60 * 60 * 1000;
-    const visible = (data ?? []).filter(l => (Date.now() - new Date(l.updated_at).getTime()) < TWO_HOURS);
-    setLocations(visible);
+    setLocations(data ?? []);
     setLastRefresh(new Date());
-    updateMarkers(visible, map);
+    updateMarkers(data ?? [], map);
     setLoading(false);
   }
 
@@ -1098,103 +1025,7 @@ function LiveDriversMap({ drivers }) {
 }
 
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
-// ─── PENDING ENTRY ROW ────────────────────────────────────────────────────────
-function PendingEntryRow({ entry, driverName, onComplete }) {
-  const [expanded, setExpanded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    pay: "",
-    hours: "",
-    actual_cost: String(entry.actual_cost ?? ""),
-    estimated_cost: String(entry.estimated_cost ?? ""),
-    crm_id: "",
-    carpage_link: entry.carpage_link ?? "",
-    recon_missed: entry.recon_missed ?? false,
-  });
-
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
-
-  async function handleComplete() {
-    if (!form.pay || !form.crm_id) return;
-    setSaving(true);
-    const { data, error } = await supabase.from("entries").update({
-      pay: Number(form.pay),
-      hours: form.hours ? Number(form.hours) : null,
-      actual_cost: form.actual_cost ? Number(form.actual_cost) : 0,
-      estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
-      crm_id: form.crm_id,
-      carpage_link: form.carpage_link || null,
-      recon_missed: form.recon_missed,
-    }).eq("id", entry.id).select().single();
-    setSaving(false);
-    if (!error && data) onComplete(data);
-  }
-
-  return (
-    <div style={{
-      border: "1px solid var(--border)", marginBottom: 10,
-      borderLeft: "3px solid #3b8cf7", background: "var(--bg)",
-    }}>
-      {/* Summary row */}
-      <div
-        style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 16px", cursor: "pointer" }}
-        onClick={() => setExpanded(x => !x)}
-      >
-        <div style={{ flex: 1 }}>
-          <span style={{ fontWeight: 700, color: "var(--text)" }}>{driverName}</span>
-          <span style={{ marginLeft: 12, fontSize: 12, color: "var(--muted)" }}>{formatDate(entry.date)}</span>
-          <span style={{ marginLeft: 12, fontSize: 12, color: "var(--muted)" }}>{entry.city}</span>
-        </div>
-        <div style={{ fontSize: 12, color: "var(--muted)", display: "flex", gap: 16 }}>
-          {entry.miles > 0 && <span>{entry.miles} mi</span>}
-          {entry.drive_time > 0 && <span>{entry.drive_time}h drive</span>}
-        </div>
-        <span style={{ fontSize: 18, color: "var(--accent)" }}>{expanded ? "▲" : "▼"}</span>
-      </div>
-
-      {/* Expandable form */}
-      {expanded && (
-        <div style={{ padding: "0 16px 16px" }}>
-          <div className="form-grid" style={{ marginTop: 0 }}>
-            <div className="field">
-              <label>Pay Amount ($) *</label>
-              <input type="number" placeholder="0.00" value={form.pay} onChange={e => set("pay", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Hours Worked</label>
-              <input type="number" placeholder="0" value={form.hours} onChange={e => set("hours", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Actual Cost ($)</label>
-              <input type="number" placeholder="0.00" value={form.actual_cost} onChange={e => set("actual_cost", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Estimated Cost ($)</label>
-              <input type="number" placeholder="0.00" value={form.estimated_cost} onChange={e => set("estimated_cost", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Carpage ID *</label>
-              <input type="text" placeholder="CP-XXXX" value={form.crm_id} onChange={e => set("crm_id", e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Carpage Link</label>
-              <input type="url" placeholder="https://..." value={form.carpage_link} onChange={e => set("carpage_link", e.target.value)} />
-            </div>
-          </div>
-          <div className="checkbox-row">
-            <input type="checkbox" id={`recon-${entry.id}`} checked={form.recon_missed} onChange={e => set("recon_missed", e.target.checked)} />
-            <label htmlFor={`recon-${entry.id}`} style={{ color: form.recon_missed ? "var(--danger)" : "var(--text)" }}>Recon was missed</label>
-          </div>
-          <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={handleComplete} disabled={saving || !form.pay || !form.crm_id}>
-            {saving ? "Saving..." : "Complete Entry →"}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AdminDashboard({ allProfiles, entries, setEntries }) {
+function AdminDashboard({ allProfiles, entries, setEntries, trips, setTrips }) {
   const drivers = allProfiles.filter(u => u.role === "driver");
   const [tab, setTab] = useState("overview");
   const [selectedDriver, setSelectedDriver] = useState(null);
@@ -1271,7 +1102,7 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
     return (
       <div className="page">
         <button className="btn btn-ghost" style={{ marginBottom: 20, padding: "6px 14px", fontSize: 12 }} onClick={() => setSelectedDriver(null)}>← All Drivers</button>
-        <DriverDashboard driver={selectedDriver} entries={driverEntries} tab={driverTab} setTab={setDriverTab} />
+        <DriverDashboard driver={selectedDriver} entries={driverEntries} trips={trips.filter(t => t.driver_id === selectedDriver.id || t.second_driver_id === selectedDriver.id)} setTrips={setTrips} tab={driverTab} setTab={setDriverTab} />
       </div>
     );
   }
@@ -1285,7 +1116,7 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       <PayPeriodBanner />
 
       <div className="tabs">
-        {["overview", "log entry", "all entries", "mileage costs", "availability", "live drivers", "downloads"].map(t => (
+        {["overview", "trips", "log entry", "all entries", "mileage costs", "availability", "live drivers"].map(t => (
           <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
@@ -1320,96 +1151,66 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       )}
 
       {tab === "log entry" && (
-        <div className="fade-in">
-          {/* Pending driver submissions */}
-          {(() => {
-            const pending = entries.filter(e => (!e.crm_id || e.crm_id === "") && (e.miles > 0 || e.drive_time > 0));
-            if (pending.length === 0) return null;
-            return (
-              <div className="form-card" style={{ marginBottom: 24, borderLeft: "3px solid var(--accent)" }}>
-                <div className="form-card-title" style={{ marginBottom: 4 }}>
-                  Pending Driver Submissions
-                  <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 600, color: "var(--accent)", background: "rgba(232,180,74,0.12)", padding: "2px 8px", borderRadius: 4 }}>{pending.length}</span>
+        <div className="form-card fade-in">
+          <div className="form-card-title">Log Daily Entry</div>
+          {drivers.length === 0 ? (
+            <div style={{ color: "var(--muted)", fontSize: 14 }}>No drivers in the system yet. Add driver profiles first.</div>
+          ) : (
+            <>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Driver</label>
+                  <select value={form.driver_id} onChange={e => setForm(f => ({ ...f, driver_id: e.target.value }))}>
+                    {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
                 </div>
-                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}>These trips were submitted by drivers via the app. Fill in the missing details below.</div>
-                {pending.map(e => {
-                  const driver = allProfiles.find(p => p.id === e.driver_id);
-                  return (
-                    <PendingEntryRow
-                      key={e.id}
-                      entry={e}
-                      driverName={driver?.name ?? "Unknown"}
-                      onComplete={updated => setEntries(prev => prev.map(x => x.id === updated.id ? updated : x))}
-                    />
-                  );
-                })}
+                <div className="field">
+                  <label>Date</label>
+                  <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Pay Amount ($)</label>
+                  <input type="number" placeholder="0.00" value={form.pay} onChange={e => setForm(f => ({ ...f, pay: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Hours Worked</label>
+                  <input type="number" placeholder="0" value={form.hours} onChange={e => setForm(f => ({ ...f, hours: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Miles Driven</label>
+                  <input type="number" placeholder="0" value={form.miles} onChange={e => setForm(f => ({ ...f, miles: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Actual Cost ($)</label>
+                  <input type="number" placeholder="0.00" value={form.actual_cost} onChange={e => setForm(f => ({ ...f, actual_cost: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Estimated Cost ($)</label>
+                  <input type="number" placeholder="0.00" value={form.estimated_cost} onChange={e => setForm(f => ({ ...f, estimated_cost: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>City</label>
+                  <input type="text" placeholder="Charlotte" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Carpage ID</label>
+                  <input type="text" placeholder="CP-XXXX" value={form.crm_id} onChange={e => setForm(f => ({ ...f, crm_id: e.target.value }))} />
+                </div>
+                <div className="field" style={{ gridColumn: "1 / -1" }}>
+                  <label>Carpage Link</label>
+                  <input type="url" placeholder="https://..." value={form.carpage_link} onChange={e => setForm(f => ({ ...f, carpage_link: e.target.value }))} />
+                </div>
               </div>
-            );
-          })()}
-
-          {/* Manual entry form */}
-          <div className="form-card">
-            <div className="form-card-title">New Manual Entry</div>
-            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}>For trips not tracked via the app.</div>
-            {drivers.length === 0 ? (
-              <div style={{ color: "var(--muted)", fontSize: 14 }}>No drivers in the system yet. Add driver profiles first.</div>
-            ) : (
-              <>
-                <div className="form-grid">
-                  <div className="field">
-                    <label>Driver</label>
-                    <select value={form.driver_id} onChange={e => setForm(f => ({ ...f, driver_id: e.target.value }))}>
-                      {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label>Date</label>
-                    <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
-                  </div>
-                  <div className="field">
-                    <label>Pay Amount ($)</label>
-                    <input type="number" placeholder="0.00" value={form.pay} onChange={e => setForm(f => ({ ...f, pay: e.target.value }))} />
-                  </div>
-                  <div className="field">
-                    <label>Hours Worked</label>
-                    <input type="number" placeholder="0" value={form.hours} onChange={e => setForm(f => ({ ...f, hours: e.target.value }))} />
-                  </div>
-                  <div className="field">
-                    <label>Miles Driven</label>
-                    <input type="number" placeholder="0" value={form.miles} onChange={e => setForm(f => ({ ...f, miles: e.target.value }))} />
-                  </div>
-                  <div className="field">
-                    <label>Actual Cost ($)</label>
-                    <input type="number" placeholder="0.00" value={form.actual_cost} onChange={e => setForm(f => ({ ...f, actual_cost: e.target.value }))} />
-                  </div>
-                  <div className="field">
-                    <label>Estimated Cost ($)</label>
-                    <input type="number" placeholder="0.00" value={form.estimated_cost} onChange={e => setForm(f => ({ ...f, estimated_cost: e.target.value }))} />
-                  </div>
-                  <div className="field">
-                    <label>City</label>
-                    <input type="text" placeholder="Charlotte" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
-                  </div>
-                  <div className="field">
-                    <label>Carpage ID</label>
-                    <input type="text" placeholder="CP-XXXX" value={form.crm_id} onChange={e => setForm(f => ({ ...f, crm_id: e.target.value }))} />
-                  </div>
-                  <div className="field" style={{ gridColumn: "1 / -1" }}>
-                    <label>Carpage Link</label>
-                    <input type="url" placeholder="https://..." value={form.carpage_link} onChange={e => setForm(f => ({ ...f, carpage_link: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="checkbox-row">
-                  <input type="checkbox" id="recon" checked={form.recon_missed} onChange={e => setForm(f => ({ ...f, recon_missed: e.target.checked }))} />
-                  <label htmlFor="recon" style={{ color: form.recon_missed ? "var(--danger)" : "var(--text)" }}>Recon was missed on this vehicle</label>
-                </div>
-                <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={handleSubmit} disabled={submitting}>
-                  {submitting ? "Saving..." : "Save Entry →"}
-                </button>
-                {saved && <div className="success-toast">✓ Entry saved to database</div>}
-              </>
-            )}
-          </div>
+              <div className="checkbox-row">
+                <input type="checkbox" id="recon" checked={form.recon_missed} onChange={e => setForm(f => ({ ...f, recon_missed: e.target.checked }))} />
+                <label htmlFor="recon" style={{ color: form.recon_missed ? "var(--danger)" : "var(--text)" }}>Recon was missed on this vehicle</label>
+              </div>
+              <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={handleSubmit} disabled={submitting}>
+                {submitting ? "Saving..." : "Save Entry →"}
+              </button>
+              {saved && <div className="success-toast">✓ Entry saved to database</div>}
+            </>
+          )}
         </div>
       )}
 
@@ -1482,6 +1283,10 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
           </div>
         </>
       )}
+      {tab === "trips" && (
+        <AdminTrips drivers={drivers} allProfiles={allProfiles} trips={trips} setTrips={setTrips} setEntries={setEntries} />
+      )}
+
       {tab === "mileage costs" && (
         <MileageCostReport entries={entries} drivers={drivers} allProfiles={allProfiles} thisMonth={thisMonth} wkStart={wkStart} wkEnd={wkEnd} />
       )}
@@ -1492,50 +1297,459 @@ function AdminDashboard({ allProfiles, entries, setEntries }) {
       {tab === "live drivers" && (
         <LiveDriversMap drivers={drivers} />
     )}
-      {tab === "downloads" && (
-        <div style={{ maxWidth: 480 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "var(--muted)", marginBottom: 24 }}>
-            App Downloads
+    </div>
+  );
+}
+
+// ─── TRIP STATUS BADGE ────────────────────────────────────────────────────────
+const STATUS_COLORS = { pending: "#3b8cf7", in_progress: "#e8b44a", completed: "#4ae885", finalized: "#6b7585" };
+function TripStatusBadge({ status }) {
+  return (
+    <span style={{ background: `${STATUS_COLORS[status]}22`, color: STATUS_COLORS[status], border: `1px solid ${STATUS_COLORS[status]}44`, padding: "2px 8px", fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>
+      {status.replace("_", " ")}
+    </span>
+  );
+}
+
+// ─── CREATE TRIP ──────────────────────────────────────────────────────────────
+function CreateTrip({ drivers, onCreated }) {
+  const now = new Date();
+  const [form, setForm] = useState({
+    driver_id: drivers[0]?.id || "",
+    second_driver_id: "",
+    designated_driver_id: "",
+    trip_type: "fly",
+    city: "",
+    crm_id: "",
+    carpage_link: "",
+    scheduled_pickup: now.toISOString().slice(0, 16),
+    notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function handleCreate() {
+    if (!form.driver_id || !form.city || !form.crm_id || !form.scheduled_pickup) { setError("Driver, city, CRM ID and pickup time are required."); return; }
+    if (form.trip_type === "drive" && !form.second_driver_id) { setError("Drive trips require a second driver."); return; }
+    if (form.trip_type === "drive" && form.second_driver_id === form.driver_id) { setError("Primary and second driver must be different."); return; }
+    setSaving(true); setError("");
+    const payload = {
+      driver_id: form.driver_id,
+      trip_type: form.trip_type,
+      city: form.city,
+      crm_id: form.crm_id,
+      carpage_link: form.carpage_link || null,
+      scheduled_pickup: new Date(form.scheduled_pickup).toISOString(),
+      notes: form.notes || null,
+      status: "pending",
+      second_driver_id: form.trip_type === "drive" ? form.second_driver_id : null,
+      designated_driver_id: form.trip_type === "drive" ? form.designated_driver_id || form.driver_id : form.driver_id,
+    };
+    const { data, error: err } = await supabase.from("trips").insert(payload).select().single();
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    onCreated(data);
+    setSaved(true);
+    setForm(f => ({ ...f, city: "", crm_id: "", carpage_link: "", notes: "", second_driver_id: "", designated_driver_id: "" }));
+    setTimeout(() => setSaved(false), 3000);
+  }
+
+  return (
+    <div className="form-card fade-in">
+      <div className="form-card-title">Create Trip</div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Trip Type</label>
+          <select value={form.trip_type} onChange={e => set("trip_type", e.target.value)}>
+            <option value="fly">✈ Fly</option>
+            <option value="drive">🚗 Drive</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>Scheduled Pickup</label>
+          <input type="datetime-local" value={form.scheduled_pickup} onChange={e => set("scheduled_pickup", e.target.value)} />
+        </div>
+        <div className="field">
+          <label>{form.trip_type === "drive" ? "Driver 1 (Chase Car)" : "Assigned Driver"}</label>
+          <select value={form.driver_id} onChange={e => set("driver_id", e.target.value)}>
+            {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+        {form.trip_type === "drive" && (
+          <div className="field">
+            <label>Driver 2 (Drives Vehicle Back)</label>
+            <select value={form.second_driver_id} onChange={e => set("second_driver_id", e.target.value)}>
+              <option value="">— Select —</option>
+              {drivers.filter(d => d.id !== form.driver_id).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
           </div>
-          <a
-            href="https://testflight.apple.com/join/YOURCODE"
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              display: "flex", alignItems: "center", gap: 16,
-              background: "var(--surface)", border: "1px solid var(--border)",
-              borderLeft: "3px solid #3b8cf7",
-              padding: "20px 24px", marginBottom: 12,
-              textDecoration: "none", color: "var(--text)",
-            }}
-          >
-            <span style={{ fontSize: 28 }}>🍎</span>
-            <div>
-              <div style={{ fontFamily: "var(--font-head)", fontSize: 16, fontWeight: 700, letterSpacing: 1 }}>iOS App</div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Install via TestFlight</div>
-            </div>
-          </a>
-          <a
-            href="/driverportal.apk"
-            download
-            style={{
-              display: "flex", alignItems: "center", gap: 16,
-              background: "var(--surface)", border: "1px solid var(--border)",
-              borderLeft: "3px solid #4ae885",
-              padding: "20px 24px", marginBottom: 12,
-              textDecoration: "none", color: "var(--text)",
-            }}
-          >
-            <span style={{ fontSize: 28 }}>🤖</span>
-            <div>
-              <div style={{ fontFamily: "var(--font-head)", fontSize: 16, fontWeight: 700, letterSpacing: 1 }}>Android App</div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>Download & install APK</div>
-            </div>
-          </a>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 16, lineHeight: 1.6 }}>
-            Android: after downloading, open the file and allow installation from unknown sources when prompted.
+        )}
+        {form.trip_type === "drive" && form.second_driver_id && (
+          <div className="field">
+            <label>Designated Driver (controls Start/End)</label>
+            <select value={form.designated_driver_id || form.driver_id} onChange={e => set("designated_driver_id", e.target.value)}>
+              <option value={form.driver_id}>{drivers.find(d => d.id === form.driver_id)?.name}</option>
+              <option value={form.second_driver_id}>{drivers.find(d => d.id === form.second_driver_id)?.name}</option>
+            </select>
+          </div>
+        )}
+        <div className="field">
+          <label>City / Pickup Location</label>
+          <input type="text" placeholder="Columbus, OH" value={form.city} onChange={e => set("city", e.target.value)} />
+        </div>
+        <div className="field">
+          <label>CRM ID</label>
+          <input type="text" placeholder="AB123" value={form.crm_id} onChange={e => set("crm_id", e.target.value)} />
+        </div>
+        <div className="field" style={{ gridColumn: "1 / -1" }}>
+          <label>Carpage Link</label>
+          <input type="url" placeholder="https://..." value={form.carpage_link} onChange={e => set("carpage_link", e.target.value)} />
+        </div>
+        <div className="field" style={{ gridColumn: "1 / -1" }}>
+          <label>Notes</label>
+          <input type="text" placeholder="Flight info, seller contact, etc." value={form.notes} onChange={e => set("notes", e.target.value)} />
+        </div>
+      </div>
+      {error && <div className="error-msg" style={{ textAlign: "left", marginTop: 8 }}>{error}</div>}
+      <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={handleCreate} disabled={saving}>
+        {saving ? "Creating..." : "Create Trip →"}
+      </button>
+      {saved && <div className="success-toast">✓ Trip created and assigned to driver</div>}
+    </div>
+  );
+}
+
+// ─── FINALIZE TRIP MODAL ──────────────────────────────────────────────────────
+function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
+  const driver1 = allProfiles.find(p => p.id === trip.driver_id);
+  const driver2 = trip.second_driver_id ? allProfiles.find(p => p.id === trip.second_driver_id) : null;
+  const duration = trip.actual_start && trip.actual_end
+    ? ((new Date(trip.actual_end) - new Date(trip.actual_start)) / 3600000).toFixed(1)
+    : "";
+  const [form, setForm] = useState({
+    pay: "", pay2: "",
+    hours: duration,
+    miles: String(trip.miles ?? ""),
+    actual_cost: String(trip.actual_cost ?? ""),
+    estimated_cost: String(trip.estimated_cost ?? ""),
+    recon_missed: false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function handleFinalize() {
+    if (!form.pay) { setError("Pay is required."); return; }
+    if (driver2 && !form.pay2) { setError("Pay for both drivers is required."); return; }
+    setSaving(true); setError("");
+
+    // Update trip to finalized
+    const { error: tripErr } = await supabase.from("trips").update({
+      status: "finalized",
+      miles: form.miles ? Number(form.miles) : 0,
+      actual_cost: form.actual_cost ? Number(form.actual_cost) : 0,
+      estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
+    }).eq("id", trip.id);
+    if (tripErr) { setError(tripErr.message); setSaving(false); return; }
+
+    // Create entry for driver 1
+    const baseEntry = {
+      date: (trip.actual_end ? new Date(trip.actual_end) : new Date()).toISOString().slice(0, 10),
+      city: trip.city,
+      crm_id: trip.crm_id,
+      carpage_link: trip.carpage_link,
+      hours: form.hours ? Number(form.hours) : 0,
+      miles: form.miles ? Number(form.miles) : 0,
+      actual_cost: form.actual_cost ? Number(form.actual_cost) : 0,
+      estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
+      recon_missed: form.recon_missed,
+      trip_id: trip.id,
+    };
+    await supabase.from("entries").insert({ ...baseEntry, driver_id: trip.driver_id, pay: Number(form.pay) });
+
+    // Create identical entry for driver 2 if drive trip
+    if (driver2) {
+      await supabase.from("entries").insert({ ...baseEntry, driver_id: trip.second_driver_id, pay: Number(form.pay2) });
+    }
+
+    setSaving(false);
+    onFinalized(trip.id);
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ width: 560 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-title">Finalize Trip</div>
+        <div style={{ marginBottom: 16, padding: "10px 14px", background: "var(--bg)", border: "1px solid var(--border)", fontSize: 13 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>{trip.crm_id} — {trip.city}</div>
+          <div style={{ color: "var(--muted)", fontSize: 12 }}>
+            {driver1?.name}{driver2 ? ` + ${driver2.name}` : ""} · {trip.trip_type === "fly" ? "✈ Fly" : "🚗 Drive"}
+            {trip.actual_start && trip.actual_end && (
+              <span style={{ marginLeft: 12 }}>⏱ {duration}h recorded</span>
+            )}
           </div>
         </div>
+        <div className="form-grid">
+          <div className="field">
+            <label>Pay — {driver1?.name} ($)</label>
+            <input type="number" placeholder="0.00" value={form.pay} onChange={e => set("pay", e.target.value)} autoFocus />
+          </div>
+          {driver2 && (
+            <div className="field">
+              <label>Pay — {driver2?.name} ($)</label>
+              <input type="number" placeholder="0.00" value={form.pay2} onChange={e => set("pay2", e.target.value)} />
+            </div>
+          )}
+          <div className="field">
+            <label>Hours Worked</label>
+            <input type="number" placeholder="0" value={form.hours} onChange={e => set("hours", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Miles Driven</label>
+            <input type="number" placeholder="0" value={form.miles} onChange={e => set("miles", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Actual Cost ($)</label>
+            <input type="number" placeholder="0.00" value={form.actual_cost} onChange={e => set("actual_cost", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Estimated Cost ($)</label>
+            <input type="number" placeholder="0.00" value={form.estimated_cost} onChange={e => set("estimated_cost", e.target.value)} />
+          </div>
+        </div>
+        <div className="checkbox-row">
+          <input type="checkbox" id="fin-recon" checked={form.recon_missed} onChange={e => set("recon_missed", e.target.checked)} />
+          <label htmlFor="fin-recon" style={{ color: form.recon_missed ? "var(--danger)" : "var(--text)" }}>Recon was missed on this vehicle</label>
+        </div>
+        {error && <div className="error-msg" style={{ textAlign: "left" }}>{error}</div>}
+        <div className="modal-actions">
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" style={{ padding: "8px 16px", fontSize: 12 }} onClick={handleFinalize} disabled={saving}>
+            {saving ? "Saving..." : "Finalize & Create Log Entries →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN TRIPS ──────────────────────────────────────────────────────────────
+function AdminTrips({ drivers, allProfiles, trips, setTrips, setEntries }) {
+  const [view, setView] = useState("active"); // active | all | create
+  const [finalizingTrip, setFinalizingTrip] = useState(null);
+
+  const active = trips.filter(t => ["pending", "in_progress", "completed"].includes(t.status));
+  const all = trips;
+  const displayed = view === "create" ? [] : view === "active" ? active : all;
+
+  function getDriverNames(trip) {
+    const d1 = allProfiles.find(p => p.id === trip.driver_id)?.name ?? "—";
+    const d2 = trip.second_driver_id ? allProfiles.find(p => p.id === trip.second_driver_id)?.name : null;
+    return d2 ? `${d1} + ${d2}` : d1;
+  }
+
+  function handleFinalized(tripId) {
+    setTrips(prev => prev.map(t => t.id === tripId ? { ...t, status: "finalized" } : t));
+    setFinalizingTrip(null);
+    // Reload entries so new log entries appear
+    supabase.from("entries").select("*").order("date", { ascending: false }).then(({ data }) => {
+      if (data) setEntries(data);
+    });
+  }
+
+  return (
+    <div className="fade-in">
+      {finalizingTrip && (
+        <FinalizeTripModal
+          trip={finalizingTrip}
+          allProfiles={allProfiles}
+          onFinalized={handleFinalized}
+          onClose={() => setFinalizingTrip(null)}
+        />
+      )}
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        {[["active", `Active (${active.length})`], ["all", `All Trips (${all.length})`], ["create", "＋ Create Trip"]].map(([v, label]) => (
+          <button key={v} className={`btn ${view === v ? "btn-primary" : "btn-ghost"}`} style={{ padding: "8px 18px", fontSize: 12 }} onClick={() => setView(v)}>{label}</button>
+        ))}
+      </div>
+
+      {view === "create" && (
+        <CreateTrip drivers={drivers} onCreated={t => { setTrips(prev => [t, ...prev]); setView("active"); }} />
+      )}
+
+      {view !== "create" && (
+        <div className="table-wrap">
+          <div className="table-head">
+            <div className="table-head-title">{view === "active" ? "Active Trips" : "All Trips"}</div>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>{displayed.length} trips</span>
+          </div>
+          {displayed.length === 0 ? (
+            <div style={{ padding: 24, color: "var(--muted)", fontSize: 14 }}>No trips found. Create one to get started.</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Type</th>
+                  <th>Driver(s)</th>
+                  <th>CRM ID</th>
+                  <th>City</th>
+                  <th>Pickup</th>
+                  <th>Started</th>
+                  <th>Ended</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...displayed].sort((a, b) => new Date(b.scheduled_pickup) - new Date(a.scheduled_pickup)).map(trip => (
+                  <tr key={trip.id}>
+                    <td><TripStatusBadge status={trip.status} /></td>
+                    <td>{trip.trip_type === "fly" ? "✈ Fly" : "🚗 Drive"}</td>
+                    <td style={{ fontWeight: 600 }}>{getDriverNames(trip)}</td>
+                    <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--muted)" }}>
+                      {trip.carpage_link
+                        ? <a href={trip.carpage_link} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none" }}>{trip.crm_id} ↗</a>
+                        : trip.crm_id}
+                    </td>
+                    <td>{trip.city}</td>
+                    <td style={{ color: "var(--muted)", fontSize: 12 }}>
+                      {new Date(trip.scheduled_pickup).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{" "}
+                      {new Date(trip.scheduled_pickup).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    </td>
+                    <td style={{ color: "var(--muted)", fontSize: 12 }}>
+                      {trip.actual_start ? new Date(trip.actual_start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}
+                    </td>
+                    <td style={{ color: "var(--muted)", fontSize: 12 }}>
+                      {trip.actual_end ? new Date(trip.actual_end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}
+                    </td>
+                    <td>
+                      {trip.status === "completed" && (
+                        <button className="btn-edit" style={{ background: "rgba(74,232,133,0.1)", color: "var(--success)", borderColor: "var(--success)" }} onClick={() => setFinalizingTrip(trip)}>
+                          Finalize
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── DRIVER TRIPS ─────────────────────────────────────────────────────────────
+function DriverTrips({ driver, trips, setTrips }) {
+  const [acting, setActing] = useState(null); // trip id being acted on
+
+  const isDesignated = (trip) => trip.designated_driver_id === driver.id;
+  const myTrips = trips.filter(t => t.driver_id === driver.id || t.second_driver_id === driver.id);
+  const pending = myTrips.filter(t => t.status === "pending");
+  const inProgress = myTrips.filter(t => t.status === "in_progress");
+  const recent = myTrips.filter(t => ["completed", "finalized"].includes(t.status)).slice(0, 5);
+
+  async function handleStart(trip) {
+    setActing(trip.id);
+    const { data, error } = await supabase.from("trips").update({ status: "in_progress", actual_start: new Date().toISOString() }).eq("id", trip.id).select().single();
+    setActing(null);
+    if (!error && data) setTrips(prev => prev.map(t => t.id === data.id ? data : t));
+  }
+
+  async function handleEnd(trip) {
+    setActing(trip.id);
+    const { data, error } = await supabase.from("trips").update({ status: "completed", actual_end: new Date().toISOString() }).eq("id", trip.id).select().single();
+    setActing(null);
+    if (!error && data) setTrips(prev => prev.map(t => t.id === data.id ? data : t));
+  }
+
+  function TripCard({ trip, showControls }) {
+    const isActive = trip.status === "in_progress";
+    const borderColor = isActive ? "var(--accent)" : STATUS_COLORS[trip.status];
+    const canControl = showControls && isDesignated(trip);
+    return (
+      <div style={{ border: `1px solid var(--border)`, borderLeft: `3px solid ${borderColor}`, background: "var(--bg)", padding: "16px 20px", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <span style={{ fontFamily: "var(--font-head)", fontSize: 18, fontWeight: 700 }}>{trip.crm_id}</span>
+              <TripStatusBadge status={trip.status} />
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>{trip.trip_type === "fly" ? "✈ Fly" : "🚗 Drive"}</span>
+            </div>
+            <div style={{ fontSize: 14, color: "var(--text)", marginBottom: 4 }}>📍 {trip.city}</div>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>
+              Pickup: {new Date(trip.scheduled_pickup).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}{" "}
+              @ {new Date(trip.scheduled_pickup).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+            </div>
+            {trip.notes && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>📝 {trip.notes}</div>}
+            {isActive && trip.actual_start && (
+              <div style={{ fontSize: 12, color: "var(--accent)", marginTop: 4 }}>
+                ⏱ Started at {new Date(trip.actual_start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+              </div>
+            )}
+            {trip.status === "completed" && trip.actual_end && (
+              <div style={{ fontSize: 12, color: "var(--success)", marginTop: 4 }}>
+                ✓ Ended at {new Date(trip.actual_end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} — waiting for admin to finalize
+              </div>
+            )}
+          </div>
+          {canControl && (
+            <div>
+              {trip.status === "pending" && (
+                <button className="btn btn-primary" style={{ fontSize: 12, padding: "8px 18px" }} onClick={() => handleStart(trip)} disabled={acting === trip.id}>
+                  {acting === trip.id ? "Starting..." : "▶ Start Trip"}
+                </button>
+              )}
+              {trip.status === "in_progress" && (
+                <button className="btn" style={{ fontSize: 12, padding: "8px 18px", background: "var(--danger)", color: "#fff" }} onClick={() => handleEnd(trip)} disabled={acting === trip.id}>
+                  {acting === trip.id ? "Ending..." : "⏹ End Trip"}
+                </button>
+              )}
+            </div>
+          )}
+          {showControls && !canControl && trip.status === "pending" && (
+            <div style={{ fontSize: 11, color: "var(--muted)", padding: "6px 12px", border: "1px solid var(--border)" }}>
+              Waiting for designated driver to start
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (myTrips.length === 0) {
+    return (
+      <div className="form-card fade-in" style={{ textAlign: "center", padding: 40 }}>
+        <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.3 }}>🚗</div>
+        <div style={{ color: "var(--muted)", fontSize: 14 }}>No trips assigned yet. Check back when your manager sets one up.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fade-in">
+      {inProgress.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "var(--accent)", marginBottom: 12 }}>▶ In Progress</div>
+          {inProgress.map(t => <TripCard key={t.id} trip={t} showControls={true} />)}
+        </>
+      )}
+      {pending.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "var(--muted)", marginBottom: 12, marginTop: inProgress.length ? 24 : 0 }}>Upcoming</div>
+          {pending.map(t => <TripCard key={t.id} trip={t} showControls={true} />)}
+        </>
+      )}
+      {recent.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "var(--muted)", marginBottom: 12, marginTop: 24 }}>Recent</div>
+          {recent.map(t => <TripCard key={t.id} trip={t} showControls={false} />)}
+        </>
       )}
     </div>
   );
@@ -1614,7 +1828,7 @@ function AdminAvailability({ drivers }) {
                       ) : rec[d] ? (
                         <div>
                           <span style={{ color: "var(--success)", fontWeight: 700, fontSize: 14 }}>✓</span>
-                          {rec[`${d}_done_by`] && <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{(() => { const [h, m] = rec[`${d}_done_by`].slice(0,5).split(":"); const hr = parseInt(h); return `${hr % 12 || 12}:${m}${hr >= 12 ? "pm" : "am"}`; })()}</div>}
+                          {rec[`${d}_done_by`] && <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>{rec[`${d}_done_by`].slice(0, 5)}</div>}
                         </div>
                       ) : (
                         <span style={{ color: "var(--danger)", fontSize: 14 }}>✗</span>
@@ -1636,6 +1850,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [allProfiles, setAllProfiles] = useState([]);
   const [entries, setEntries] = useState([]);
+  const [trips, setTrips] = useState([]);
   const [appLoading, setAppLoading] = useState(true);
   const [driverTab, setDriverTab] = useState("overview");
 
@@ -1665,6 +1880,11 @@ export default function App() {
       if (user.role === "driver") query = query.eq("driver_id", user.id);
       const { data: entryData } = await query;
       if (entryData) setEntries(entryData);
+
+      let tripQuery = supabase.from("trips").select("*").order("scheduled_pickup", { ascending: false });
+      if (user.role === "driver") tripQuery = tripQuery.or(`driver_id.eq.${user.id},second_driver_id.eq.${user.id}`);
+      const { data: tripData } = await tripQuery;
+      if (tripData) setTrips(tripData);
     }
     loadData();
   }, [user]);
@@ -1674,6 +1894,7 @@ export default function App() {
     setUser(null);
     setEntries([]);
     setAllProfiles([]);
+    setTrips([]);
     setDriverTab("overview");
   }
 
@@ -1697,8 +1918,8 @@ export default function App() {
         <>
           <Topbar user={user} onLogout={handleLogout} />
           {user.role === "driver"
-            ? <DriverDashboard driver={user} entries={driverEntries} tab={driverTab} setTab={setDriverTab} />
-            : <AdminDashboard allProfiles={allProfiles} entries={entries} setEntries={setEntries} />
+            ? <DriverDashboard driver={user} entries={driverEntries} trips={trips} setTrips={setTrips} tab={driverTab} setTab={setDriverTab} />
+            : <AdminDashboard allProfiles={allProfiles} entries={entries} setEntries={setEntries} trips={trips} setTrips={setTrips} />
           }
         </>
       )}
