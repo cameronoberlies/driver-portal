@@ -1540,6 +1540,14 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
 function AdminTrips({ drivers, allProfiles, trips, setTrips, setEntries }) {
   const [view, setView] = useState("active"); // active | all | create
   const [finalizingTrip, setFinalizingTrip] = useState(null);
+  const [acting, setActing] = useState(null); // trip id being acted on
+
+  async function handleEndTrip(trip) {
+    setActing(trip.id);
+    const { data, error } = await supabase.from("trips").update({ status: "completed", actual_end: new Date().toISOString() }).eq("id", trip.id).select().single();
+    setActing(null);
+    if (!error && data) setTrips(prev => prev.map(t => t.id === data.id ? data : t));
+  }
 
   const active = trips.filter(t => ["pending", "in_progress", "completed"].includes(t.status));
   const all = trips;
@@ -1627,6 +1635,11 @@ function AdminTrips({ drivers, allProfiles, trips, setTrips, setEntries }) {
                       {trip.actual_end ? new Date(trip.actual_end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}
                     </td>
                     <td>
+                      {trip.status === "in_progress" && (
+                        <button className="btn-edit" style={{ background: "rgba(232,90,74,0.1)", color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => handleEndTrip(trip)} disabled={acting === trip.id}>
+                          {acting === trip.id ? "Ending..." : "⏹ End Trip"}
+                        </button>
+                      )}
                       {trip.status === "completed" && (
                         <button className="btn-edit" style={{ background: "rgba(74,232,133,0.1)", color: "var(--success)", borderColor: "var(--success)" }} onClick={() => setFinalizingTrip(trip)}>
                           Finalize
