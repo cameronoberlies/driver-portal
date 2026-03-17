@@ -1868,34 +1868,17 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
     setSaving(true);
     setError("");
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      setError("Session expired. Please log in again.");
-      setSaving(false);
-      return;
-    }
-    const response = await fetch(
-      `${supabase.supabaseUrl}/functions/v1/manage-users`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "create",
-          ...form,
-        }),
+    const { data, error } = await supabase.functions.invoke("manage-users", {
+      body: {
+        action: "create",
+        ...form,
       },
-    );
+    });
 
-    const result = await response.json();
     setSaving(false);
 
-    if (!response.ok) {
-      setError(result.error || "Failed to create user");
+    if (error) {
+      setError(error.message || "Failed to create user");
       return;
     }
 
@@ -1915,41 +1898,23 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
     if (!confirm(`Delete ${user.name}? This cannot be undone.`)) return;
 
     setDeleting(user.id);
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
-      setDeleting(null);
-      setError("Session expired. Please log in again.");
-      return;
-    }
-    const response = await fetch(
-      `${supabase.supabaseUrl}/functions/v1/manage-users`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          apikey:
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "create",
-          ...form,
-        }),
+
+    const { error } = await supabase.functions.invoke("manage-users", {
+      body: {
+        action: "delete",
+        userId: user.id,
       },
-    );
+    });
 
-    if (!response.ok) {
-      const result = await response.json();
+    if (error) {
       setDeleting(null);
-      setError(result.error || "Failed to delete user");
+      setError(error.message || "Failed to delete user");
       return;
     }
 
-    // Refresh profiles
     const { data: profiles } = await supabase.from("profiles").select("*");
     if (profiles) setAllProfiles(profiles);
+
     setDeleting(null);
   }
 
