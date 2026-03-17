@@ -1847,6 +1847,200 @@ function LiveDriversMap({ drivers }) {
   );
 }
 
+function ManageUsers({ allProfiles, setAllProfiles }) {
+  const [view, setView] = useState('list'); // list | add
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'driver' });
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  async function handleCreate() {
+    if (!form.name || !form.email || !form.password) {
+      setError('All fields required');
+      return;
+    }
+    setSaving(true);
+    setError('');
+   
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setError('Session expired. Please log in again.'); setSaving(false); return; }
+    const response = await fetch(`${supabase.supabaseUrl}/functions/v1/manage-users`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'create',
+        ...form,
+      }),
+    });
+
+    const result = await response.json();
+    setSaving(false);
+
+    if (!response.ok) {
+      setError(result.error || 'Failed to create user');
+      return;
+    }
+
+    // Refresh profiles
+    const { data: profiles } = await supabase.from('profiles').select('*');
+    if (profiles) setAllProfiles(profiles);
+    
+    setSuccess(`✓ Created ${form.name}`);
+    setForm({ name: '', email: '', password: '', role: 'driver' });
+    setTimeout(() => {
+      setSuccess('');
+      setView('list');
+    }, 2000);
+  }
+
+  async function handleDelete(user) {
+    if (!confirm(`Delete ${user.name}? This cannot be undone.`)) return;
+    
+    setDeleting(user.id);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setDeleting(null); setError('Session expired. Please log in again.'); return; }
+    const response = await fetch(`${supabase.supabaseUrl}/functions/v1/manage-users`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'delete',
+        userId: user.id,
+      }),
+    });
+
+    if (!response.ok) {
+      const result = await response.json();
+      setDeleting(null);
+      setError(result.error || 'Failed to delete user');
+      return;
+    }
+
+    // Refresh profiles
+    const { data: profiles } = await supabase.from('profiles').select('*');
+    if (profiles) setAllProfiles(profiles);
+    setDeleting(null);
+  }
+
+  return (
+    <div className="fade-in">
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+        {[['list', 'All Users'], ['add', '＋ Add User']].map(([v, label]) => (
+          <button
+            key={v}
+            className={`btn ${view === v ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ padding: '8px 18px', fontSize: 12 }}
+            onClick={() => setView(v)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {error && <div className="error-msg" style={{ textAlign: 'left', marginBottom: 12 }}>{error}</div>}
+      {success && <div className="success-toast">{success}</div>}
+
+      {view === 'add' && (
+        <div className="form-card">
+          <div className="form-card-title">Add New User</div>
+          <div className="form-grid">
+            <div className="field">
+              <label>Full Name</label>
+              <input
+                type="text"
+                placeholder="John Doe"
+                value={form.name}
+                onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div className="field">
+              <label>Email</label>
+              <input
+                type="email"
+                placeholder="john@example.com"
+                value={form.email}
+                onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
+              />
+            </div>
+            <div className="field">
+              <label>Password</label>
+              <input
+                type="password"
+                placeholder="Min. 6 characters"
+                value={form.password}
+                onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
+              />
+            </div>
+            <div className="field">
+              <label>Role</label>
+              <select value={form.role} onChange={(e) => setForm(f => ({ ...f, role: e.target.value }))}>
+                <option value="driver">Driver</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <button
+            className="btn btn-primary"
+            style={{ marginTop: 16 }}
+            onClick={handleCreate}
+            disabled={saving}
+          >
+            {saving ? 'Creating...' : 'Create User →'}
+          </button>
+        </div>
+      )}
+
+      {view === 'list' && (
+        <div className="table-wrap">
+          <div className="table-head">
+            <div className="table-head-title">All Users</div>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>{allProfiles.length} users</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {allProfiles.map(user => (
+                <tr key={user.id}>
+                  <td style={{ fontWeight: 600 }}>{user.name}</td>
+                  <td style={{ color: 'var(--muted)', fontSize: 13 }}>{user.email || '—'}</td>
+                  <td>
+                    <span className={`badge ${user.role === 'admin' ? 'badge-ok' : ''}`} style={{ background: user.role === 'admin' ? 'rgba(232,180,74,0.15)' : 'rgba(107,117,133,0.15)', color: user.role === 'admin' ? 'var(--accent)' : 'var(--muted)' }}>
+                      {user.role?.toUpperCase() ?? '—'}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      className="btn-edit"
+                      style={{ background: 'rgba(232,90,74,0.1)', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                      onClick={() => handleDelete(user)}
+                      disabled={deleting === user.id}
+                    >
+                      {deleting === user.id ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
 function AdminDashboard({
   allProfiles,
@@ -2014,6 +2208,7 @@ function AdminDashboard({
           "mileage costs",
           "availability",
           "live drivers",
+          "manage users",
           "downloads",
         ].map((t) => (
           <button
@@ -2547,6 +2742,7 @@ function AdminDashboard({
           </div>
         </div>
       )}
+      {tab === "manage users" && <ManageUsers allProfiles={allProfiles} setAllProfiles={setAllProfiles} />}
     </div>
   );
 }
