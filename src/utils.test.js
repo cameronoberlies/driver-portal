@@ -11,6 +11,8 @@ import {
   isSaturday,
   formatPayPeriod,
   calcReconStreak,
+  validateTripForm,
+  buildTripPayload,
 } from "./utils.js";
 
 // ─── getWeekBounds ────────────────────────────────────────────────────────────
@@ -306,5 +308,106 @@ describe("buildCSVContent", () => {
         expect(cell.endsWith('"')).toBe(true);
       });
     });
+  });
+});
+
+// ─── validateTripForm ─────────────────────────────────────────────────────────
+describe("validateTripForm", () => {
+  const base = {
+    driver_id: "d1", city: "Nashville", crm_id: "AB123",
+    scheduled_pickup: "2025-03-20T10:00", trip_type: "fly",
+    second_driver_id: "", designated_driver_id: "",
+  };
+
+  it("returns null for a valid fly trip", () => {
+    expect(validateTripForm(base)).toBeNull();
+  });
+
+  it("returns null for a valid drive trip with a second driver", () => {
+    expect(validateTripForm({ ...base, trip_type: "drive", second_driver_id: "d2" })).toBeNull();
+  });
+
+  it("errors when driver_id is missing", () => {
+    expect(validateTripForm({ ...base, driver_id: "" })).toBe("Driver, city, CRM ID and pickup time are required.");
+  });
+
+  it("errors when city is missing", () => {
+    expect(validateTripForm({ ...base, city: "" })).toBe("Driver, city, CRM ID and pickup time are required.");
+  });
+
+  it("errors when crm_id is missing", () => {
+    expect(validateTripForm({ ...base, crm_id: "" })).toBe("Driver, city, CRM ID and pickup time are required.");
+  });
+
+  it("errors when scheduled_pickup is missing", () => {
+    expect(validateTripForm({ ...base, scheduled_pickup: "" })).toBe("Driver, city, CRM ID and pickup time are required.");
+  });
+
+  it("errors when drive trip has no second driver", () => {
+    expect(validateTripForm({ ...base, trip_type: "drive", second_driver_id: "" })).toBe("Drive trips require a second driver.");
+  });
+
+  it("errors when drive trip primary and second driver are the same", () => {
+    expect(validateTripForm({ ...base, trip_type: "drive", second_driver_id: "d1" })).toBe("Primary and second driver must be different.");
+  });
+});
+
+// ─── buildTripPayload ─────────────────────────────────────────────────────────
+describe("buildTripPayload", () => {
+  const base = {
+    driver_id: "d1", city: "Nashville", crm_id: "AB123",
+    scheduled_pickup: "2026-03-20T10:00",
+    trip_type: "fly", carpage_link: "", notes: "",
+    second_driver_id: "", designated_driver_id: "",
+  };
+
+  it("sets status to pending", () => {
+    expect(buildTripPayload(base).status).toBe("pending");
+  });
+
+  it("converts scheduled_pickup to a full ISO string", () => {
+    const result = buildTripPayload(base);
+    expect(result.scheduled_pickup).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(result.scheduled_pickup).toContain("2026-03-20");
+  });
+
+  it("sets carpage_link to null when empty", () => {
+    expect(buildTripPayload(base).carpage_link).toBeNull();
+  });
+
+  it("preserves carpage_link when provided", () => {
+    const result = buildTripPayload({ ...base, carpage_link: "https://carpage.io/abc" });
+    expect(result.carpage_link).toBe("https://carpage.io/abc");
+  });
+
+  it("sets notes to null when empty", () => {
+    expect(buildTripPayload(base).notes).toBeNull();
+  });
+
+  it("preserves notes when provided", () => {
+    expect(buildTripPayload({ ...base, notes: "Gate B12" }).notes).toBe("Gate B12");
+  });
+
+  it("fly trip: second_driver_id is null", () => {
+    expect(buildTripPayload(base).second_driver_id).toBeNull();
+  });
+
+  it("fly trip: designated_driver_id defaults to driver_id", () => {
+    expect(buildTripPayload(base).designated_driver_id).toBe("d1");
+  });
+
+  it("drive trip: second_driver_id is set", () => {
+    const result = buildTripPayload({ ...base, trip_type: "drive", second_driver_id: "d2" });
+    expect(result.second_driver_id).toBe("d2");
+  });
+
+  it("drive trip: designated_driver_id uses form value when set", () => {
+    const result = buildTripPayload({ ...base, trip_type: "drive", second_driver_id: "d2", designated_driver_id: "d2" });
+    expect(result.designated_driver_id).toBe("d2");
+  });
+
+  it("drive trip: designated_driver_id falls back to driver_id when not set", () => {
+    const result = buildTripPayload({ ...base, trip_type: "drive", second_driver_id: "d2", designated_driver_id: "" });
+    expect(result.designated_driver_id).toBe("d1");
   });
 });

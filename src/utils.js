@@ -65,6 +65,38 @@ export function calcReconStreak(entries) {
   return streak;
 }
 
+// ─── TRIP HELPERS ─────────────────────────────────────────────────────────────
+
+export function validateTripForm(form) {
+  if (!form.driver_id || !form.city || !form.crm_id || !form.scheduled_pickup) {
+    return "Driver, city, CRM ID and pickup time are required.";
+  }
+  if (form.trip_type === "drive" && !form.second_driver_id) {
+    return "Drive trips require a second driver.";
+  }
+  if (form.trip_type === "drive" && form.second_driver_id === form.driver_id) {
+    return "Primary and second driver must be different.";
+  }
+  return null;
+}
+
+export function buildTripPayload(form) {
+  return {
+    driver_id: form.driver_id,
+    trip_type: form.trip_type,
+    city: form.city,
+    crm_id: form.crm_id,
+    carpage_link: form.carpage_link || null,
+    scheduled_pickup: new Date(form.scheduled_pickup).toISOString(),
+    notes: form.notes || null,
+    status: "pending",
+    second_driver_id: form.trip_type === "drive" ? form.second_driver_id : null,
+    designated_driver_id: form.trip_type === "drive"
+      ? form.designated_driver_id || form.driver_id
+      : form.driver_id,
+  };
+}
+
 export const CSV_HEADERS = ["Driver", "Date", "City", "Carpage ID", "Carpage Link", "Pay", "Hours", "Miles", "Actual Cost", "Estimated Cost", "Recon Missed"];
 
 export function buildCSVContent(entries, profiles) {

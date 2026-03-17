@@ -10,6 +10,8 @@ import {
   formatPayPeriod,
   calcReconStreak,
   buildCSVContent,
+  validateTripForm,
+  buildTripPayload,
 } from "./utils.js";
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
@@ -1373,26 +1375,39 @@ function CreateTrip({ drivers, onCreated }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [fetching, setFetching] = useState(false);
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
+  async function handleCarpageLink(url) {
+    set("carpage_link", url);
+    if (!url.includes("carpage.io")) return;
+
+    setFetching(true);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke("fetch-carpage", {
+        body: { url },
+      });
+      if (fnErr || data?.error) {
+        console.error("CarPage fetch failed:", fnErr || data?.error);
+        return;
+      }
+      if (data.crm_id) set("crm_id", data.crm_id);
+      if (data.city) set("city", data.city);
+      if (data.notes) set("notes", data.notes);
+      if (data.scheduled_pickup) set("scheduled_pickup", data.scheduled_pickup);
+    } catch (e) {
+      console.error("CarPage fetch error:", e);
+    } finally {
+      setFetching(false);
+    }
+  }
+
   async function handleCreate() {
-    if (!form.driver_id || !form.city || !form.crm_id || !form.scheduled_pickup) { setError("Driver, city, CRM ID and pickup time are required."); return; }
-    if (form.trip_type === "drive" && !form.second_driver_id) { setError("Drive trips require a second driver."); return; }
-    if (form.trip_type === "drive" && form.second_driver_id === form.driver_id) { setError("Primary and second driver must be different."); return; }
+    const validationError = validateTripForm(form);
+    if (validationError) { setError(validationError); return; }
     setSaving(true); setError("");
-    const payload = {
-      driver_id: form.driver_id,
-      trip_type: form.trip_type,
-      city: form.city,
-      crm_id: form.crm_id,
-      carpage_link: form.carpage_link || null,
-      scheduled_pickup: new Date(form.scheduled_pickup).toISOString(),
-      notes: form.notes || null,
-      status: "pending",
-      second_driver_id: form.trip_type === "drive" ? form.second_driver_id : null,
-      designated_driver_id: form.trip_type === "drive" ? form.designated_driver_id || form.driver_id : form.driver_id,
-    };
+    const payload = buildTripPayload(form);
     const { data, error: err } = await supabase.from("trips").insert(payload).select().single();
     setSaving(false);
     if (err) { setError(err.message); return; }
@@ -1406,6 +1421,15 @@ function CreateTrip({ drivers, onCreated }) {
     <div className="form-card fade-in">
       <div className="form-card-title">Create Trip</div>
       <div className="form-grid">
+        <div className="field" style={{ gridColumn: "1 / -1" }}>
+          <label>Carpage Link {fetching && <span style={{ color: "var(--accent)", fontSize: 11, marginLeft: 8, letterSpacing: 1 }}>LOADING...</span>}</label>
+          <input
+            type="url"
+            placeholder="Paste CarPage pickup link to auto-fill..."
+            value={form.carpage_link}
+            onChange={e => handleCarpageLink(e.target.value)}
+          />
+        </div>
         <div className="field">
           <label>Trip Type</label>
           <select value={form.trip_type} onChange={e => set("trip_type", e.target.value)}>
@@ -1448,10 +1472,6 @@ function CreateTrip({ drivers, onCreated }) {
         <div className="field">
           <label>CRM ID</label>
           <input type="text" placeholder="AB123" value={form.crm_id} onChange={e => set("crm_id", e.target.value)} />
-        </div>
-        <div className="field" style={{ gridColumn: "1 / -1" }}>
-          <label>Carpage Link</label>
-          <input type="url" placeholder="https://..." value={form.carpage_link} onChange={e => set("carpage_link", e.target.value)} />
         </div>
         <div className="field" style={{ gridColumn: "1 / -1" }}>
           <label>Notes</label>
