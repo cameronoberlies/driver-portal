@@ -2044,6 +2044,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
 function AdminDashboard({
   allProfiles,
+  setAllProfiles,
   entries,
   setEntries,
   trips,
@@ -4067,6 +4068,7 @@ export default function App() {
           ) : (
             <AdminDashboard
               allProfiles={allProfiles}
+              setAllProfiles={setAllProfiles}
               entries={entries}
               setEntries={setEntries}
               trips={trips}
