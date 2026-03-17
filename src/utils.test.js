@@ -13,6 +13,9 @@ import {
   calcReconStreak,
   validateTripForm,
   buildTripPayload,
+  parseCarpageCity,
+  buildCarpageNotes,
+  parseCarpagePickup,
 } from "./utils.js";
 
 // ─── getWeekBounds ────────────────────────────────────────────────────────────
@@ -409,5 +412,86 @@ describe("buildTripPayload", () => {
   it("drive trip: designated_driver_id falls back to driver_id when not set", () => {
     const result = buildTripPayload({ ...base, trip_type: "drive", second_driver_id: "d2", designated_driver_id: "" });
     expect(result.designated_driver_id).toBe("d1");
+  });
+});
+
+// ─── parseCarpageCity ─────────────────────────────────────────────────────────
+describe("parseCarpageCity", () => {
+  it("extracts city and state from a full address", () => {
+    expect(parseCarpageCity("123 Main St, Nashville, TN 37203")).toBe("Nashville, TN");
+  });
+
+  it("handles multi-word city names", () => {
+    expect(parseCarpageCity("456 Oak Ave, Kansas City, MO 64101")).toBe("Kansas City, MO");
+  });
+
+  it("uppercases the state abbreviation", () => {
+    expect(parseCarpageCity("789 Elm Rd, Memphis, tn 38101")).toBe("Memphis, TN");
+  });
+
+  it("returns empty string when address has no zip code pattern", () => {
+    expect(parseCarpageCity("Nashville, TN")).toBe("");
+  });
+
+  it("returns empty string for an empty address", () => {
+    expect(parseCarpageCity("")).toBe("");
+  });
+});
+
+// ─── buildCarpageNotes ────────────────────────────────────────────────────────
+describe("buildCarpageNotes", () => {
+  it("returns empty string when all fields are empty", () => {
+    expect(buildCarpageNotes({ sellerName: "", sellerPhone: "", place: "", address: "", note: "", vin: "", boughtPrice: "" })).toBe("");
+  });
+
+  it("includes only present fields", () => {
+    const result = buildCarpageNotes({ sellerName: "John", sellerPhone: "", place: "", address: "", note: "", vin: "", boughtPrice: "" });
+    expect(result).toBe("Seller: John");
+  });
+
+  it("joins multiple fields with ' | '", () => {
+    const result = buildCarpageNotes({ sellerName: "John", sellerPhone: "555-1234", place: "", address: "", note: "", vin: "", boughtPrice: "" });
+    expect(result).toBe("Seller: John | Phone: 555-1234");
+  });
+
+  it("includes all fields in the correct order", () => {
+    const result = buildCarpageNotes({
+      sellerName: "Jane", sellerPhone: "555-9999", place: "Lot A",
+      address: "123 Main St", note: "Call first", vin: "1HGBH41", boughtPrice: "$12,000",
+    });
+    expect(result).toBe("Seller: Jane | Phone: 555-9999 | Place: Lot A | Address: 123 Main St | Note: Call first | VIN: 1HGBH41 | Bought for: $12,000");
+  });
+
+  it("skips falsy fields (null, undefined, 0)", () => {
+    const result = buildCarpageNotes({ sellerName: "Jane", sellerPhone: null, place: undefined, address: "", note: "", vin: "", boughtPrice: "" });
+    expect(result).toBe("Seller: Jane");
+  });
+});
+
+// ─── parseCarpagePickup ───────────────────────────────────────────────────────
+describe("parseCarpagePickup", () => {
+  it("returns empty string for empty input", () => {
+    expect(parseCarpagePickup("")).toBe("");
+  });
+
+  it("returns empty string for null/undefined input", () => {
+    expect(parseCarpagePickup(null)).toBe("");
+    expect(parseCarpagePickup(undefined)).toBe("");
+  });
+
+  it("returns empty string for an unparseable date string", () => {
+    expect(parseCarpagePickup("not a date")).toBe("");
+  });
+
+  it("converts a valid date string to YYYY-MM-DDTHH:MM format", () => {
+    const result = parseCarpagePickup("2026-03-20T14:30:00Z");
+    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    expect(result).toHaveLength(16);
+  });
+
+  it("handles a human-readable date string", () => {
+    const result = parseCarpagePickup("March 20, 2026 10:00 AM");
+    expect(result).toMatch(/^2026-03-20T/);
+    expect(result).toHaveLength(16);
   });
 });

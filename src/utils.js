@@ -65,6 +65,32 @@ export function calcReconStreak(entries) {
   return streak;
 }
 
+// ─── CARPAGE HELPERS ──────────────────────────────────────────────────────────
+
+export function parseCarpageCity(address) {
+  const match = address.match(/([A-Za-z\s]+),\s*([A-Za-z]{2})\s*\d{5}/);
+  return match ? `${match[1].trim()}, ${match[2].toUpperCase()}` : "";
+}
+
+export function buildCarpageNotes({ sellerName, sellerPhone, place, address, note, vin, boughtPrice }) {
+  const parts = [];
+  if (sellerName) parts.push(`Seller: ${sellerName}`);
+  if (sellerPhone) parts.push(`Phone: ${sellerPhone}`);
+  if (place) parts.push(`Place: ${place}`);
+  if (address) parts.push(`Address: ${address}`);
+  if (note) parts.push(`Note: ${note}`);
+  if (vin) parts.push(`VIN: ${vin}`);
+  if (boughtPrice) parts.push(`Bought for: ${boughtPrice}`);
+  return parts.join(" | ");
+}
+
+export function parseCarpagePickup(timeText) {
+  if (!timeText) return "";
+  const parsed = new Date(timeText);
+  if (isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 16);
+}
+
 // ─── TRIP HELPERS ─────────────────────────────────────────────────────────────
 
 export function validateTripForm(form) {

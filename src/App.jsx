@@ -12,6 +12,9 @@ import {
   buildCSVContent,
   validateTripForm,
   buildTripPayload,
+  parseCarpageCity,
+  buildCarpageNotes,
+  parseCarpagePickup,
 } from "./utils.js";
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
@@ -1380,28 +1383,52 @@ function CreateTrip({ drivers, onCreated }) {
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
   async function handleCarpageLink(url) {
-    set("carpage_link", url);
-    if (!url.includes("carpage.io")) return;
+  set("carpage_link", url);
+  if (!url.includes("carpage.io")) return;
 
-    setFetching(true);
-    try {
-      const { data, error: fnErr } = await supabase.functions.invoke("fetch-carpage", {
-        body: { url },
-      });
-      if (fnErr || data?.error) {
-        console.error("CarPage fetch failed:", fnErr || data?.error);
-        return;
+  setFetching(true);
+  try {
+    const response = await fetch(url, { credentials: "include" });
+    const html = await response.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+
+    const getInput = (name) => 
+      doc.querySelector(`input[name="${name}"]`)?.value ?? "";
+
+    const crmId = new URL(url).searchParams.get("cid") ?? "";
+    const address = getInput("address");
+    const city = parseCarpageCity(address);
+    const scheduledPickup = parseCarpagePickup(getInput("pickup_time_text"));
+
+    const sellerPhone = getInput("contact_phone");
+    const place = getInput("place");
+    const vin = getInput("car_vin");
+    const boughtPrice = getInput("bought_price");
+    const note = doc.querySelector("div[data-name='note']")?.textContent?.trim() ?? "";
+
+    // Seller name
+    let sellerName = "";
+    for (const row of doc.querySelectorAll(".car-pickup__row")) {
+      if (row.querySelector(".car-pickup__label")?.textContent?.trim() === "Name:") {
+        sellerName = row.querySelector(".car-pickup__value")?.textContent?.trim() ?? "";
+        break;
       }
-      if (data.crm_id) set("crm_id", data.crm_id);
-      if (data.city) set("city", data.city);
-      if (data.notes) set("notes", data.notes);
-      if (data.scheduled_pickup) set("scheduled_pickup", data.scheduled_pickup);
-    } catch (e) {
-      console.error("CarPage fetch error:", e);
-    } finally {
-      setFetching(false);
     }
+
+    const notes = buildCarpageNotes({ sellerName, sellerPhone, place, address, note, vin, boughtPrice });
+
+    if (crmId) set("crm_id", crmId);
+    if (city) set("city", city);
+    if (notes) set("notes", notes);
+    if (scheduledPickup) set("scheduled_pickup", scheduledPickup);
+
+  } catch (e) {
+    console.error("CarPage fetch error:", e);
+  } finally {
+    setFetching(false);
   }
+}
 
   async function handleCreate() {
     const validationError = validateTripForm(form);
