@@ -2053,7 +2053,6 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Email</th>
                 <th>Role</th>
                 <th></th>
               </tr>
@@ -2062,9 +2061,6 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
               {allProfiles.map((user) => (
                 <tr key={user.id}>
                   <td style={{ fontWeight: 600 }}>{user.name}</td>
-                  <td style={{ color: "var(--muted)", fontSize: 13 }}>
-                    {user.email || "—"}
-                  </td>
                   <td>
                     <span
                       className={`badge ${user.role === "admin" ? "badge-ok" : ""}`}
