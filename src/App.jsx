@@ -1147,7 +1147,7 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
             >
               {drivers.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.name}
+                  {d.name}{d.willing_to_fly ? ' (F)' : ''}
                 </option>
               ))}
             </select>
@@ -1365,7 +1365,7 @@ function MileageCostReport({
               <option value="all">All Drivers</option>
               {drivers.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.name}
+                  {d.name}{d.willing_to_fly ? ' (F)' : ''}
                 </option>
               ))}
             </select>
@@ -1455,7 +1455,10 @@ function MileageCostReport({
                     Number(e.actual_cost ?? 0) - Number(e.estimated_cost ?? 0);
                   return (
                     <tr key={e.id}>
-                      <td style={{ fontWeight: 600 }}>{driver?.name ?? "—"}</td>
+                      <td style={{ fontWeight: 600 }}>
+                        {driver?.name ?? "—"}
+                        {driver?.willing_to_fly && <span style={{ color: "var(--accent)", marginLeft: 8, fontSize: 12, fontWeight: 700 }}>(F)</span>}
+                      </td>
                       <td>{formatDate(e.date)}</td>
                       <td>{e.city}</td>
                       <td style={{ color: "var(--muted)" }}>
@@ -1854,6 +1857,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
     email: "",
     password: "",
     role: "driver",
+    willing_to_fly: false,
   });
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(null);
@@ -1861,96 +1865,102 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
   const [success, setSuccess] = useState("");
 
   async function handleCreate() {
-  if (!form.name || !form.email || !form.password) {
-    setError("All fields required");
-    return;
-  }
-  setSaving(true);
-  setError("");
-
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    setError("Session expired. Please log in again.");
-    setSaving(false);
-    return;
-  }
-
-  const response = await fetch(
-    `https://yincjogkjvotupzgetqg.supabase.co/functions/v1/manage-users`,
-    {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${session.access_token}`,
-        "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        action: "create",
-        ...form,
-      }),
+    if (!form.name || !form.email || !form.password) {
+      setError("All fields required");
+      return;
     }
-  );
+    setSaving(true);
+    setError("");
 
-  const result = await response.json();
-  setSaving(false);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) {
+      setError("Session expired. Please log in again.");
+      setSaving(false);
+      return;
+    }
 
-  if (!response.ok) {
-    setError(result.error || "Failed to create user");
-    return;
+    const response = await fetch(
+      `https://yincjogkjvotupzgetqg.supabase.co/functions/v1/manage-users`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey:
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "create",
+          ...form,
+        }),
+      },
+    );
+
+    const result = await response.json();
+    setSaving(false);
+
+    if (!response.ok) {
+      setError(result.error || "Failed to create user");
+      return;
+    }
+
+    // Refresh profiles
+    const { data: profiles } = await supabase.from("profiles").select("*");
+    if (profiles) setAllProfiles(profiles);
+
+    setSuccess(`✓ Created ${form.name}`);
+    setForm({ name: "", email: "", password: "", role: "driver" });
+    setTimeout(() => {
+      setSuccess("");
+      setView("list");
+    }, 2000);
   }
-
-  // Refresh profiles
-  const { data: profiles } = await supabase.from("profiles").select("*");
-  if (profiles) setAllProfiles(profiles);
-
-  setSuccess(`✓ Created ${form.name}`);
-  setForm({ name: "", email: "", password: "", role: "driver" });
-  setTimeout(() => {
-    setSuccess("");
-    setView("list");
-  }, 2000);
-}
 
   async function handleDelete(user) {
-  if (!confirm(`Delete ${user.name}? This cannot be undone.`)) return;
+    if (!confirm(`Delete ${user.name}? This cannot be undone.`)) return;
 
-  setDeleting(user.id);
-  
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    setDeleting(null);
-    setError("Session expired. Please log in again.");
-    return;
-  }
+    setDeleting(user.id);
 
-  const response = await fetch(
-    `https://yincjogkjvotupzgetqg.supabase.co/functions/v1/manage-users`,
-    {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${session.access_token}`,
-        "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        action: "delete",
-        userId: user.id,
-      }),
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) {
+      setDeleting(null);
+      setError("Session expired. Please log in again.");
+      return;
     }
-  );
 
-  if (!response.ok) {
-    const result = await response.json();
+    const response = await fetch(
+      `https://yincjogkjvotupzgetqg.supabase.co/functions/v1/manage-users`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          apikey:
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "delete",
+          userId: user.id,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const result = await response.json();
+      setDeleting(null);
+      setError(result.error || "Failed to delete user");
+      return;
+    }
+
+    const { data: profiles } = await supabase.from("profiles").select("*");
+    if (profiles) setAllProfiles(profiles);
+
     setDeleting(null);
-    setError(result.error || "Failed to delete user");
-    return;
   }
-
-  const { data: profiles } = await supabase.from("profiles").select("*");
-  if (profiles) setAllProfiles(profiles);
-  
-  setDeleting(null);
-}
 
   return (
     <div className="fade-in">
@@ -2029,6 +2039,18 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
                 <option value="admin">Admin</option>
               </select>
             </div>
+            <div className="field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.willing_to_fly}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, willing_to_fly: e.target.checked }))
+                  }
+                />
+                Willing to fly
+              </label>
+            </div>
           </div>
           <button
             className="btn btn-primary"
@@ -2060,7 +2082,21 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
             <tbody>
               {allProfiles.map((user) => (
                 <tr key={user.id}>
-                  <td style={{ fontWeight: 600 }}>{user.name}</td>
+                  <td style={{ fontWeight: 600 }}>
+                    {user.name}
+                    {user.willing_to_fly && (
+                      <span
+                        style={{
+                          color: "var(--accent)",
+                          marginLeft: 8,
+                          fontSize: 12,
+                          fontWeight: 700,
+                        }}
+                      >
+                        (F)
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <span
                       className={`badge ${user.role === "admin" ? "badge-ok" : ""}`}
@@ -2332,7 +2368,10 @@ function AdminDashboard({
                     setDriverTab("overview");
                   }}
                 >
-                  <div className="driver-name">{d.name}</div>
+                  <div className="driver-name">
+                    {d.name}
+                    {d.willing_to_fly && <span style={{ color: "var(--accent)", marginLeft: 8, fontSize: 12, fontWeight: 700 }}>(F)</span>}
+                  </div>
                   <div className="driver-meta">
                     {weekEntries.length} trips this week · {monthTrips} this
                     month
@@ -2374,7 +2413,7 @@ function AdminDashboard({
                   >
                     {drivers.map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.name}
+                        {d.name}{d.willing_to_fly ? ' (F)' : ''}
                       </option>
                     ))}
                   </select>
@@ -2536,7 +2575,7 @@ function AdminDashboard({
                   <option value="all">All Drivers</option>
                   {drivers.map((d) => (
                     <option key={d.id} value={d.id}>
-                      {d.name}
+                      {d.name}{d.willing_to_fly ? ' (F)' : ''}
                     </option>
                   ))}
                 </select>
@@ -2625,6 +2664,7 @@ function AdminDashboard({
                       <tr key={e.id}>
                         <td style={{ fontWeight: 600 }}>
                           {driver?.name ?? "—"}
+                          {driver?.willing_to_fly && <span style={{ color: "var(--accent)", marginLeft: 8, fontSize: 12, fontWeight: 700 }}>(F)</span>}
                         </td>
                         <td>{formatDate(e.date)}</td>
                         <td>{e.city}</td>
@@ -3025,7 +3065,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
           >
             {drivers.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.name}
+                {d.name}{d.willing_to_fly ? ' (F)' : ''}
               </option>
             ))}
           </select>
@@ -3042,7 +3082,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
                 .filter((d) => d.id !== form.driver_id)
                 .map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.name}
+                    {d.name}{d.willing_to_fly ? ' (F)' : ''}
                   </option>
                 ))}
             </select>
@@ -3056,10 +3096,10 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
               onChange={(e) => set("designated_driver_id", e.target.value)}
             >
               <option value={form.driver_id}>
-                {drivers.find((d) => d.id === form.driver_id)?.name}
+                {(() => { const d = drivers.find((d) => d.id === form.driver_id); return d ? `${d.name}${d.willing_to_fly ? ' (F)' : ''}` : ''; })()}
               </option>
               <option value={form.second_driver_id}>
-                {drivers.find((d) => d.id === form.second_driver_id)?.name}
+                {(() => { const d = drivers.find((d) => d.id === form.second_driver_id); return d ? `${d.name}${d.willing_to_fly ? ' (F)' : ''}` : ''; })()}
               </option>
             </select>
           </div>
@@ -3369,11 +3409,11 @@ function AdminTrips({
   const displayed = view === "create" ? [] : view === "active" ? active : all;
 
   function getDriverNames(trip) {
-    const d1 = allProfiles.find((p) => p.id === trip.driver_id)?.name ?? "—";
-    const d2 = trip.second_driver_id
-      ? allProfiles.find((p) => p.id === trip.second_driver_id)?.name
-      : null;
-    return d2 ? `${d1} + ${d2}` : d1;
+    const p1 = allProfiles.find((p) => p.id === trip.driver_id);
+    const p2 = trip.second_driver_id ? allProfiles.find((p) => p.id === trip.second_driver_id) : null;
+    const n1 = p1 ? `${p1.name}${p1.willing_to_fly ? ' (F)' : ''}` : "—";
+    const n2 = p2 ? `${p2.name}${p2.willing_to_fly ? ' (F)' : ''}` : null;
+    return n2 ? `${n1} + ${n2}` : n1;
   }
 
   function handleFinalized(tripId) {
@@ -3933,6 +3973,7 @@ function AdminAvailability({ drivers }) {
                 <tr key={driver.id}>
                   <td style={{ fontWeight: 600 }}>
                     {driver.name}
+                    {driver.willing_to_fly && <span style={{ color: "var(--accent)", marginLeft: 8, fontSize: 12, fontWeight: 700 }}>(F)</span>}
                     {rec?.updated_after_saturday && (
                       <span
                         title={`Amended — Reason: ${rec.update_reason}`}
