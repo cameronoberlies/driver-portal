@@ -826,6 +826,7 @@ function DriverDashboard({ driver, entries, trips, setTrips, tab, setTab }) {
           "weekly report",
           "monthly report",
           "availability",
+          "downloads",
         ].map((t) => (
           <button
             key={t}
@@ -1165,6 +1166,101 @@ function DriverDashboard({ driver, entries, trips, setTrips, tab, setTab }) {
       )}
 
       {tab === "availability" && <DriverAvailability driver={driver} />}
+
+      {tab === "downloads" && (
+        <div style={{ maxWidth: 480 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: 2,
+              textTransform: "uppercase",
+              color: "var(--muted)",
+              marginBottom: 24,
+            }}
+          >
+            App Downloads
+          </div>
+          <a
+            href="https://testflight.apple.com/join/YOURCODE"
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderLeft: "3px solid #3b8cf7",
+              padding: "20px 24px",
+              marginBottom: 12,
+              textDecoration: "none",
+              color: "var(--text)",
+            }}
+          >
+            <span style={{ fontSize: 28 }}>🍎</span>
+            <div>
+              <div
+                style={{
+                  fontFamily: "var(--font-head)",
+                  fontSize: 16,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                }}
+              >
+                iOS App
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                Install via TestFlight
+              </div>
+            </div>
+          </a>
+          <a
+            href="/driverportal.apk"
+            download
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 16,
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderLeft: "3px solid #4ae885",
+              padding: "20px 24px",
+              marginBottom: 12,
+              textDecoration: "none",
+              color: "var(--text)",
+            }}
+          >
+            <span style={{ fontSize: 28 }}>🤖</span>
+            <div>
+              <div
+                style={{
+                  fontFamily: "var(--font-head)",
+                  fontSize: 16,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                }}
+              >
+                Android App
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                Download & install APK
+              </div>
+            </div>
+          </a>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--muted)",
+              marginTop: 16,
+              lineHeight: 1.6,
+            }}
+          >
+            Android: after downloading, open the file and allow installation
+            from unknown sources when prompted.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
