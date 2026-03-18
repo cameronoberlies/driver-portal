@@ -233,7 +233,94 @@ const css = `
     .form-grid { grid-template-columns: 1fr; }
     .stats-grid { grid-template-columns: 1fr 1fr; }
     .topbar { padding: 0 16px; }
+    .driver-detail-grid { grid-template-columns: 1fr; }
   }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+  .form-group label {
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .form-group input,
+  .form-group select {
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+  }
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .driver-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .detail-section {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .detail-section h3 {
+    margin: 0 0 16px 0;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+  }
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .detail-value { font-size: 14px; color: var(--text); }
+
+  .error-banner {
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgb(239,68,68);
+    color: rgb(239,68,68);
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+  }
+  .success-banner {
+    background: rgba(34,197,94,0.1);
+    border: 1px solid rgb(34,197,94);
+    color: rgb(34,197,94);
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+  }
+
+  .btn-danger {
+    background: rgb(239,68,68);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    font-family: inherit;
+  }
+  .btn-danger:hover { background: rgb(220,38,38); }
+  .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
 `;
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
@@ -1851,14 +1938,20 @@ function LiveDriversMap({ drivers }) {
 }
 
 function ManageUsers({ allProfiles, setAllProfiles }) {
-  const [view, setView] = useState("list"); // list | add
+  const [view, setView] = useState("list"); // list | add | view
+  const [selectedDriver, setSelectedDriver] = useState(null);
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
     role: "driver",
-    willing_to_fly: false,
+    phone_number: "",
+    date_of_birth: "",
+    can_drive_manual: false,
+    drivers_license_number: "",
   });
+  const [licenseFile, setLicenseFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [error, setError] = useState("");
@@ -1866,52 +1959,102 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
 
   async function handleCreate() {
     if (!form.name || !form.email || !form.password) {
-      setError("All fields required");
+      setError("Name, email, and password are required");
       return;
     }
     setSaving(true);
     setError("");
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       setError("Session expired. Please log in again.");
       setSaving(false);
       return;
     }
 
+    // Step 1: Create the user account
     const response = await fetch(
       `https://yincjogkjvotupzgetqg.supabase.co/functions/v1/manage-users`,
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          apikey:
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
+          "Authorization": `Bearer ${session.access_token}`,
+          "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           action: "create",
-          ...form,
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          role: form.role,
         }),
-      },
+      }
     );
 
     const result = await response.json();
-    setSaving(false);
 
     if (!response.ok) {
       setError(result.error || "Failed to create user");
+      setSaving(false);
       return;
     }
 
-    // Refresh profiles
+    const newUserId = result.userId;
+
+    // Step 2: Upload license photo if provided
+    let licensePhotoUrl = null;
+    if (licenseFile && newUserId) {
+      setUploading(true);
+      const fileExt = licenseFile.name.split('.').pop();
+      const fileName = `${newUserId}/license.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('driver-licenses')
+        .upload(fileName, licenseFile, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) {
+        console.error("License upload error:", uploadError);
+        setError(`User created but license upload failed: ${uploadError.message}`);
+      } else {
+        const { data: { publicUrl } } = supabase.storage
+          .from('driver-licenses')
+          .getPublicUrl(fileName);
+        licensePhotoUrl = publicUrl;
+      }
+      setUploading(false);
+    }
+
+    // Step 3: Update profile with additional fields
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({
+        phone_number: form.phone_number || null,
+        date_of_birth: form.date_of_birth || null,
+        can_drive_manual: form.can_drive_manual,
+        drivers_license_number: form.drivers_license_number || null,
+        drivers_license_photo_url: licensePhotoUrl,
+      })
+      .eq("id", newUserId);
+
+    if (updateError) {
+      console.error("Profile update error:", updateError);
+      setError(`User created but profile update failed: ${updateError.message}`);
+      setSaving(false);
+      return;
+    }
+
     const { data: profiles } = await supabase.from("profiles").select("*");
     if (profiles) setAllProfiles(profiles);
 
+    setSaving(false);
     setSuccess(`✓ Created ${form.name}`);
-    setForm({ name: "", email: "", password: "", role: "driver" });
+    setForm({
+      name: "", email: "", password: "", role: "driver",
+      phone_number: "", date_of_birth: "",
+      can_drive_manual: false, drivers_license_number: "",
+    });
+    setLicenseFile(null);
     setTimeout(() => {
       setSuccess("");
       setView("list");
@@ -1922,14 +2065,18 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
     if (!confirm(`Delete ${user.name}? This cannot be undone.`)) return;
 
     setDeleting(user.id);
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       setDeleting(null);
       setError("Session expired. Please log in again.");
       return;
+    }
+
+    // Delete license photo if exists
+    if (user.drivers_license_photo_url) {
+      await supabase.storage
+        .from('driver-licenses')
+        .remove([`${user.id}/license.${user.drivers_license_photo_url.split('.').pop()}`]);
     }
 
     const response = await fetch(
@@ -1937,16 +2084,12 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          apikey:
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
+          "Authorization": `Bearer ${session.access_token}`,
+          "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          action: "delete",
-          userId: user.id,
-        }),
-      },
+        body: JSON.stringify({ action: "delete", userId: user.id }),
+      }
     );
 
     if (!response.ok) {
@@ -1958,182 +2101,280 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
 
     const { data: profiles } = await supabase.from("profiles").select("*");
     if (profiles) setAllProfiles(profiles);
-
     setDeleting(null);
   }
 
-  return (
-    <div className="fade-in">
-      <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
-        {[
-          ["list", "All Users"],
-          ["add", "＋ Add User"],
-        ].map(([v, label]) => (
-          <button
-            key={v}
-            className={`btn ${view === v ? "btn-primary" : "btn-ghost"}`}
-            style={{ padding: "8px 18px", fontSize: 12 }}
-            onClick={() => setView(v)}
-          >
-            {label}
+  function viewDriver(driver) {
+    setSelectedDriver(driver);
+    setView("view");
+  }
+
+  if (view === "add") {
+    return (
+      <div>
+        <div style={{ marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
+          <button onClick={() => setView("list")} className="btn-secondary">
+            ← Back
           </button>
-        ))}
+          <h2 style={{ margin: 0 }}>Create New User</h2>
+        </div>
+
+        {error && <div className="error-banner">{error}</div>}
+        {success && <div className="success-banner">{success}</div>}
+
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Name *</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Full Name"
+            />
+          </div>
+          <div className="form-group">
+            <label>Email *</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              placeholder="email@example.com"
+            />
+          </div>
+          <div className="form-group">
+            <label>Password *</label>
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              placeholder="Min 6 characters"
+            />
+          </div>
+          <div className="form-group">
+            <label>Role *</label>
+            <select
+              value={form.role}
+              onChange={(e) => setForm({ ...form, role: e.target.value })}
+            >
+              <option value="driver">Driver</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Phone Number</label>
+            <input
+              type="tel"
+              value={form.phone_number}
+              onChange={(e) => setForm({ ...form, phone_number: e.target.value })}
+              placeholder="(555) 123-4567"
+            />
+          </div>
+          <div className="form-group">
+            <label>Date of Birth</label>
+            <input
+              type="date"
+              value={form.date_of_birth}
+              onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label>Driver's License Number</label>
+            <input
+              type="text"
+              value={form.drivers_license_number}
+              onChange={(e) => setForm({ ...form, drivers_license_number: e.target.value })}
+              placeholder="DL123456"
+            />
+          </div>
+          <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+            <label>
+              <input
+                type="checkbox"
+                checked={form.can_drive_manual}
+                onChange={(e) => setForm({ ...form, can_drive_manual: e.target.checked })}
+                style={{ marginRight: 8 }}
+              />
+              Can drive manual transmission (stick shift)
+            </label>
+          </div>
+          <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+            <label>Driver's License Photo</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setLicenseFile(e.target.files[0])}
+            />
+            {licenseFile && (
+              <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
+                Selected: {licenseFile.name}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={handleCreate}
+          disabled={saving || uploading}
+          className="btn btn-primary"
+          style={{ marginTop: 24 }}
+        >
+          {saving ? "Creating..." : uploading ? "Uploading License..." : "Create User"}
+        </button>
+      </div>
+    );
+  }
+
+  if (view === "view" && selectedDriver) {
+    return (
+      <div>
+        <div style={{ marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
+          <button onClick={() => { setView("list"); setSelectedDriver(null); }} className="btn-secondary">
+            ← Back
+          </button>
+          <h2 style={{ margin: 0 }}>{selectedDriver.name}</h2>
+        </div>
+
+        <div className="driver-detail-grid">
+          <div className="detail-section">
+            <h3>Basic Information</h3>
+            <div className="detail-row">
+              <span className="detail-label">Name:</span>
+              <span className="detail-value">{selectedDriver.name}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Role:</span>
+              <span className="detail-value" style={{
+                textTransform: "capitalize",
+                color: selectedDriver.role === "admin" ? "var(--accent)" : "inherit",
+              }}>
+                {selectedDriver.role}
+              </span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Phone:</span>
+              <span className="detail-value">{selectedDriver.phone_number || "—"}</span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Date of Birth:</span>
+              <span className="detail-value">
+                {selectedDriver.date_of_birth
+                  ? new Date(selectedDriver.date_of_birth).toLocaleDateString("en-US", {
+                      year: "numeric", month: "long", day: "numeric",
+                    })
+                  : "—"}
+              </span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">Willing to Fly:</span>
+              <span className="detail-value">
+                {selectedDriver.willing_to_fly ? "✓ Yes" : "✗ No"}
+              </span>
+            </div>
+          </div>
+
+          <div className="detail-section">
+            <h3>License &amp; Driving</h3>
+            <div className="detail-row">
+              <span className="detail-label">Can Drive Manual:</span>
+              <span className="detail-value" style={{
+                color: selectedDriver.can_drive_manual ? "var(--success)" : "var(--muted)",
+              }}>
+                {selectedDriver.can_drive_manual ? "✓ Yes (Stick Shift)" : "✗ Automatic Only"}
+              </span>
+            </div>
+            <div className="detail-row">
+              <span className="detail-label">License Number:</span>
+              <span className="detail-value">{selectedDriver.drivers_license_number || "—"}</span>
+            </div>
+            {selectedDriver.drivers_license_photo_url && (
+              <div className="detail-row" style={{ flexDirection: "column", alignItems: "flex-start" }}>
+                <span className="detail-label">License Photo:</span>
+                <img
+                  src={selectedDriver.drivers_license_photo_url}
+                  alt="Driver's License"
+                  style={{
+                    maxWidth: "100%", maxHeight: 300,
+                    marginTop: 12,
+                    border: "1px solid var(--border)",
+                    borderRadius: 4,
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={() => handleDelete(selectedDriver)}
+          disabled={deleting === selectedDriver.id}
+          className="btn-danger"
+          style={{ marginTop: 24 }}
+        >
+          {deleting === selectedDriver.id ? "Deleting..." : "Delete User"}
+        </button>
+      </div>
+    );
+  }
+
+  // Default list view
+  return (
+    <div>
+      <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h2 style={{ margin: 0 }}>Manage Users</h2>
+        <button onClick={() => setView("add")} className="btn btn-primary">
+          + Create User
+        </button>
       </div>
 
-      {error && (
-        <div
-          className="error-msg"
-          style={{ textAlign: "left", marginBottom: 12 }}
-        >
-          {error}
-        </div>
-      )}
-      {success && <div className="success-toast">{success}</div>}
+      {error && <div className="error-banner">{error}</div>}
 
-      {view === "add" && (
-        <div className="form-card">
-          <div className="form-card-title">Add New User</div>
-          <div className="form-grid">
-            <div className="field">
-              <label>Full Name</label>
-              <input
-                type="text"
-                placeholder="John Doe"
-                value={form.name}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, name: e.target.value }))
-                }
-              />
-            </div>
-            <div className="field">
-              <label>Email</label>
-              <input
-                type="email"
-                placeholder="john@example.com"
-                value={form.email}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, email: e.target.value }))
-                }
-              />
-            </div>
-            <div className="field">
-              <label>Password</label>
-              <input
-                type="password"
-                placeholder="Min. 6 characters"
-                value={form.password}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, password: e.target.value }))
-                }
-              />
-            </div>
-            <div className="field">
-              <label>Role</label>
-              <select
-                value={form.role}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, role: e.target.value }))
-                }
-              >
-                <option value="driver">Driver</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={form.willing_to_fly}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, willing_to_fly: e.target.checked }))
-                  }
-                />
-                Willing to fly
-              </label>
-            </div>
-          </div>
-          <button
-            className="btn btn-primary"
-            style={{ marginTop: 16 }}
-            onClick={handleCreate}
-            disabled={saving}
-          >
-            {saving ? "Creating..." : "Create User →"}
-          </button>
-        </div>
-      )}
-
-      {view === "list" && (
-        <div className="table-wrap">
-          <div className="table-head">
-            <div className="table-head-title">All Users</div>
-            <span style={{ fontSize: 12, color: "var(--muted)" }}>
-              {allProfiles.length} users
-            </span>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Role</th>
-                <th></th>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Phone</th>
+              <th>Manual Trans</th>
+              <th>Willing to Fly</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allProfiles.map((user) => (
+              <tr key={user.id}>
+                <td style={{ fontWeight: 600 }}>{user.name}</td>
+                <td style={{ textTransform: "capitalize" }}>
+                  {user.role === "admin" && <span style={{ color: "var(--accent)" }}>★ </span>}
+                  {user.role}
+                </td>
+                <td style={{ color: "var(--muted)", fontSize: 13 }}>
+                  {user.phone_number || "—"}
+                </td>
+                <td style={{ textAlign: "center" }}>
+                  {user.can_drive_manual
+                    ? <span style={{ color: "var(--success)" }}>✓</span>
+                    : <span style={{ color: "var(--muted)" }}>—</span>}
+                </td>
+                <td style={{ textAlign: "center" }}>
+                  {user.willing_to_fly
+                    ? <span style={{ color: "var(--accent)" }}>✈</span>
+                    : <span style={{ color: "var(--muted)" }}>—</span>}
+                </td>
+                <td>
+                  <button
+                    onClick={() => viewDriver(user)}
+                    className="btn-secondary"
+                    style={{ fontSize: 12, padding: "4px 12px" }}
+                  >
+                    View Details
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {allProfiles.map((user) => (
-                <tr key={user.id}>
-                  <td style={{ fontWeight: 600 }}>
-                    {user.name}
-                    {user.willing_to_fly && (
-                      <span
-                        style={{
-                          color: "var(--accent)",
-                          marginLeft: 8,
-                          fontSize: 12,
-                          fontWeight: 700,
-                        }}
-                      >
-                        (F)
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <span
-                      className={`badge ${user.role === "admin" ? "badge-ok" : ""}`}
-                      style={{
-                        background:
-                          user.role === "admin"
-                            ? "rgba(232,180,74,0.15)"
-                            : "rgba(107,117,133,0.15)",
-                        color:
-                          user.role === "admin"
-                            ? "var(--accent)"
-                            : "var(--muted)",
-                      }}
-                    >
-                      {user.role?.toUpperCase() ?? "—"}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      className="btn-edit"
-                      style={{
-                        background: "rgba(232,90,74,0.1)",
-                        color: "var(--danger)",
-                        borderColor: "var(--danger)",
-                      }}
-                      onClick={() => handleDelete(user)}
-                      disabled={deleting === user.id}
-                    >
-                      {deleting === user.id ? "Deleting..." : "Delete"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
