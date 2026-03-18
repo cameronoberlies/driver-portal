@@ -2429,14 +2429,7 @@ function AdminDashboard({
   }, [drivers.length]);
 
   async function handleSubmit() {
-    if (
-      !form.pay ||
-      !form.hours ||
-      !form.city ||
-      !form.crm_id ||
-      !form.driver_id
-    )
-      return;
+    if (!form.driver_id || !form.date || !form.pay) return;
     setSubmitting(true);
     const { data, error } = await supabase
       .from("entries")
