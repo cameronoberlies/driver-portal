@@ -16,6 +16,7 @@ import {
   buildCarpageNotes,
   parseCarpagePickup,
 } from "./utils.js";
+import PickupCalculator from "./PickupCalculator";
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const supabase = createClient(
@@ -2637,6 +2638,7 @@ function AdminDashboard({
           "availability",
           "live drivers",
           "manage users",
+          "pickup calculator",
           "downloads",
         ].map((t) => (
           <button
@@ -3076,6 +3078,7 @@ function AdminDashboard({
 
       {tab === "availability" && <AdminAvailability drivers={drivers} />}
       {tab === "live drivers" && <LiveDriversMap drivers={drivers} />}
+      {tab === "pickup calculator" && <PickupCalculator />}
       {tab === "downloads" && (
         <div style={{ maxWidth: 480 }}>
           <div
