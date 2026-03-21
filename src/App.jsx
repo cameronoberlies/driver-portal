@@ -189,10 +189,18 @@ const css = `
   .report-row:last-child { border-bottom: none; }
   .report-total { display: flex; justify-content: space-between; padding: 12px 0 0; font-family: var(--font-head); font-size: 20px; font-weight: 700; color: var(--accent); }
 
-  .tabs { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 1px solid var(--border); overflow-x: auto; }
-  .tab { padding: 12px 20px; font-family: var(--font-head); font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; background: none; border-top: none; border-left: none; border-right: none; white-space: nowrap; }
-  .tab:hover { color: var(--text); }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; padding: 0; border: none; }
+  .tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; font-family: var(--font-head); font-size: 12px; font-weight: 700;
+    letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer;
+    color: var(--muted); background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border); border-radius: 6px;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+  .tab.active { color: var(--accent); background: rgba(232,180,74,0.08); border-color: rgba(232,180,74,0.3); }
+  .tab .tab-icon { font-size: 13px; line-height: 1; }
 
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .form-card { background: var(--surface); border: 1px solid var(--border); padding: 28px; margin-bottom: 32px; }
@@ -822,19 +830,19 @@ function DriverDashboard({ driver, entries, trips, setTrips, tab, setTab }) {
 
       <div className="tabs">
         {[
-          "overview",
-          "my trips",
-          "weekly report",
-          "monthly report",
-          "availability",
-          "downloads",
+          { key: "overview", icon: "📊", label: "Overview" },
+          { key: "my trips", icon: "🚗", label: "My Trips" },
+          { key: "weekly report", icon: "📄", label: "Weekly Report" },
+          { key: "monthly report", icon: "📈", label: "Monthly Report" },
+          { key: "availability", icon: "📅", label: "Availability" },
+          { key: "downloads", icon: "⬇", label: "Downloads" },
         ].map((t) => (
           <button
-            key={t}
-            className={`tab ${tab === t ? "active" : ""}`}
-            onClick={() => setTab(t)}
+            key={t.key}
+            className={`tab ${tab === t.key ? "active" : ""}`}
+            onClick={() => setTab(t.key)}
           >
-            {t}
+            <span className="tab-icon">{t.icon}</span> {t.label}
           </button>
         ))}
       </div>
@@ -2630,23 +2638,23 @@ function AdminDashboard({
 
       <div className="tabs">
         {[
-          "overview",
-          "trips",
-          "log entry",
-          "all entries",
-          "mileage costs",
-          "availability",
-          "live drivers",
-          "manage users",
-          "pickup calculator",
-          "downloads",
+          { key: "overview", icon: "📊", label: "Overview" },
+          { key: "trips", icon: "🚗", label: "Trips" },
+          { key: "log entry", icon: "📝", label: "Log Entry" },
+          { key: "all entries", icon: "📋", label: "All Entries" },
+          { key: "mileage costs", icon: "⛽", label: "Mileage Costs" },
+          { key: "availability", icon: "📅", label: "Availability" },
+          { key: "live drivers", icon: "📍", label: "Live Drivers" },
+          { key: "manage users", icon: "👥", label: "Manage Users" },
+          { key: "pickup calculator", icon: "🧮", label: "Pickup Calc" },
+          { key: "downloads", icon: "⬇", label: "Downloads" },
         ].map((t) => (
           <button
-            key={t}
-            className={`tab ${tab === t ? "active" : ""}`}
-            onClick={() => setTab(t)}
+            key={t.key}
+            className={`tab ${tab === t.key ? "active" : ""}`}
+            onClick={() => setTab(t.key)}
           >
-            {t}
+            <span className="tab-icon">{t.icon}</span> {t.label}
           </button>
         ))}
       </div>

@@ -30,8 +30,8 @@ export default function PickupCalculator() {
     }
 
     debounceTimer.current = setTimeout(() => {
-      fetchSuggestions(query);
-    }, 300);
+  fetchSuggestions(query);
+}, 150); // Was 300, now 150 - much faster!
 
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
