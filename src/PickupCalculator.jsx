@@ -23,11 +23,11 @@ export default function PickupCalculator() {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
     const query = location.trim();
-    if (query.length < 2) {
-      setSuggestions([]);
-      setCurrentSearchQuery("");
-      return;
-    }
+if (query.length === 0) {  // Only block if completely empty
+  setSuggestions([]);
+  setCurrentSearchQuery("");
+  return;
+}
 
     debounceTimer.current = setTimeout(() => {
   fetchSuggestions(query);
