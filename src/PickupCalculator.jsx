@@ -13,25 +13,26 @@ export default function PickupCalculator() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
-  const [currentSearchQuery, setCurrentSearchQuery] = useState("");
 
   const debounceTimer = useRef(null);
   const suggestionsRef = useRef(null);
+  const currentSearchQueryRef = useRef(""); // Use ref instead of state!
 
   // Fetch suggestions as user types
   useEffect(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
     const query = location.trim();
-if (query.length === 0) {  // Only block if completely empty
-  setSuggestions([]);
-  setCurrentSearchQuery("");
-  return;
-}
+    
+    if (query.length < 2) {
+      setSuggestions([]);
+      currentSearchQueryRef.current = "";
+      return;
+    }
 
     debounceTimer.current = setTimeout(() => {
-  fetchSuggestions(query);
-}, 150); // Was 300, now 150 - much faster!
+      fetchSuggestions(query);
+    }, 300); // Back to 300ms like the original
 
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -39,7 +40,7 @@ if (query.length === 0) {  // Only block if completely empty
   }, [location]);
 
   async function fetchSuggestions(query) {
-    setCurrentSearchQuery(query);
+    currentSearchQueryRef.current = query; // Set synchronously via ref
 
     try {
       const apiKey = "pk.ad8425665c12e1b7f5d7827258d59077";
@@ -49,7 +50,9 @@ if (query.length === 0) {  // Only block if completely empty
       if (!response.ok) return;
 
       const data = await response.json();
-      if (query !== currentSearchQuery) return;
+      
+      // Ignore stale responses - now this works because we're using ref!
+      if (query !== currentSearchQueryRef.current) return;
 
       const rankedResults = rankResults(data, query);
       setSuggestions(rankedResults);
