@@ -3102,7 +3102,7 @@ function AdminDashboard({
             App Downloads
           </div>
           <a
-            href="https://testflight.apple.com/join/YOURCODE"
+            href="https://testflight.apple.com/join/JdBj3A7X"
             target="_blank"
             rel="noreferrer"
             style={{
