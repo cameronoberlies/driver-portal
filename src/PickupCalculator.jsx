@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 export default function PickupCalculator() {
-  const RATE_PER_MILE = 2.0;
+  const [ratePerMile, setRatePerMile] = useState(2.0);
   const DESTINATION = "Shelby, NC";
   const DEST_LAT = 35.2923;
   const DEST_LON = -81.5357;
@@ -165,7 +165,7 @@ export default function PickupCalculator() {
     try {
       const originCoords = selectedCoords || (await geocodeLocation(loc));
       const distance = await getDrivingDistance(originCoords);
-      const cost = distance * RATE_PER_MILE;
+      const cost = distance * ratePerMile;
 
       setResult({
         from: loc,
@@ -295,9 +295,31 @@ export default function PickupCalculator() {
       <div className="form-card">
         <div className="form-card-title">Vehicle Pickup Calculator</div>
 
-        <div className="pickup-calc-destination">
-          <strong>Destination:</strong> {DESTINATION} | <strong>Rate:</strong>{" "}
-          ${RATE_PER_MILE.toFixed(2)}/mile
+        <div className="pickup-calc-destination" style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <span><strong>Destination:</strong> {DESTINATION}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <strong>Rate:</strong> $
+            <input
+              type="number"
+              value={ratePerMile}
+              onChange={(e) => setRatePerMile(parseFloat(e.target.value) || 0)}
+              step="0.10"
+              min="0"
+              style={{
+                width: 64,
+                padding: "4px 8px",
+                background: "var(--bg)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                color: "var(--accent)",
+                fontFamily: "var(--font-head)",
+                fontSize: 15,
+                fontWeight: 700,
+                textAlign: "center",
+              }}
+            />
+            /mile
+          </span>
         </div>
 
         <div className="field">
