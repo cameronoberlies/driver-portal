@@ -203,131 +203,216 @@ export default function PickupCalculator() {
   return (
     <div className="fade-in">
       <style>{`
-        .pickup-calc-destination {
-          background: rgba(232, 180, 74, 0.08);
-          border: 1px solid rgba(232, 180, 74, 0.2);
-          padding: 12px 16px;
-          border-radius: 6px;
-          margin-bottom: 20px;
-          font-size: 13px;
-          color: var(--text);
-        }
-
-        .pickup-calc-autocomplete {
-          position: relative;
-        }
-
-        .pickup-calc-suggestions {
-          position: absolute;
-          top: 100%;
-          left: 0;
-          right: 0;
+        .pc-card {
           background: var(--surface);
           border: 1px solid var(--border);
-          border-top: none;
-          border-radius: 0 0 4px 4px;
-          max-height: 200px;
-          overflow-y: auto;
-          z-index: 1000;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+          border-radius: 12px;
+          padding: 32px;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+          max-width: 640px;
         }
-
-        .pickup-calc-suggestion {
-          padding: 12px 16px;
-          cursor: pointer;
-          border-bottom: 1px solid var(--border);
-          transition: background-color 0.2s;
+        .pc-card::before {
+          content: ''; display: block; height: 3px; margin: -32px -32px 28px;
+          border-radius: 12px 12px 0 0;
+          background: linear-gradient(90deg, var(--accent), var(--accent2));
         }
-
-        .pickup-calc-suggestion:last-child {
-          border-bottom: none;
-        }
-
-        .pickup-calc-suggestion:hover,
-        .pickup-calc-suggestion.active {
-          background-color: rgba(232, 180, 74, 0.1);
-        }
-
-        .pickup-calc-suggestion-name {
-          color: var(--text);
-          font-weight: 500;
-          font-size: 14px;
-        }
-
-        .pickup-calc-suggestion-details {
-          color: var(--muted);
-          font-size: 12px;
-          margin-top: 2px;
-        }
-
-        .pickup-calc-result {
-          margin-top: 20px;
-          padding: 20px;
-          background: rgba(74, 232, 133, 0.08);
-          border: 1px solid rgba(74, 232, 133, 0.2);
-          border-radius: 6px;
-        }
-
-        .pickup-calc-result-label {
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 1.5px;
-          text-transform: uppercase;
-          color: var(--muted);
-          margin-bottom: 8px;
-        }
-
-        .pickup-calc-result-value {
+        .pc-title {
           font-family: var(--font-head);
-          font-size: 32px;
+          font-size: 22px;
           font-weight: 800;
-          color: var(--success);
-          margin-bottom: 12px;
+          letter-spacing: 2px;
+          text-transform: uppercase;
+          margin-bottom: 24px;
         }
 
-        .pickup-calc-result-details {
-          color: var(--text);
-          font-size: 14px;
-          line-height: 1.6;
+        .pc-config {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          margin-bottom: 28px;
+        }
+        .pc-config-item {
+          background: rgba(255,255,255,0.03);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 16px;
+          transition: border-color 0.2s;
+        }
+        .pc-config-item:hover { border-color: rgba(255,255,255,0.12); }
+        .pc-config-label {
+          font-size: 10px; font-weight: 700; letter-spacing: 2px;
+          text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+        }
+        .pc-config-value {
+          font-family: var(--font-head); font-size: 20px; font-weight: 800;
+          color: var(--text); display: flex; align-items: center; gap: 4px;
+        }
+        .pc-rate-input {
+          width: 72px; padding: 4px 8px;
+          background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+          color: var(--accent); font-family: var(--font-head);
+          font-size: 20px; font-weight: 800; text-align: center;
+          outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .pc-rate-input:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px rgba(232,180,74,0.15);
+        }
+
+        .pc-input-section { margin-bottom: 24px; }
+        .pc-label {
+          font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+          text-transform: uppercase; color: var(--muted); margin-bottom: 8px; display: block;
+        }
+        .pc-autocomplete { position: relative; }
+        .pc-input {
+          width: 100%; padding: 12px 16px;
+          background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+          color: var(--text); font-family: var(--font-body); font-size: 15px;
+          outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .pc-input::placeholder { color: rgba(107,117,133,0.6); }
+        .pc-input:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px rgba(232,180,74,0.12);
+        }
+
+        .pc-suggestions {
+          position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+          background: var(--surface); border: 1px solid var(--border);
+          border-radius: 8px; max-height: 240px; overflow-y: auto;
+          z-index: 1000; box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+          animation: fadeUp 0.15s ease;
+        }
+        .pc-suggestion {
+          padding: 12px 16px; cursor: pointer;
+          border-bottom: 1px solid rgba(42,49,64,0.4);
+          transition: all 0.15s;
+          display: flex; align-items: center; gap: 12px;
+        }
+        .pc-suggestion:first-child { border-radius: 8px 8px 0 0; }
+        .pc-suggestion:last-child { border-bottom: none; border-radius: 0 0 8px 8px; }
+        .pc-suggestion:hover, .pc-suggestion.active {
+          background: rgba(232,180,74,0.08);
+        }
+        .pc-suggestion.active {
+          border-left: 3px solid var(--accent);
+          padding-left: 13px;
+        }
+        .pc-suggestion-icon {
+          width: 32px; height: 32px; border-radius: 8px;
+          background: rgba(59,140,247,0.1); color: var(--accent2);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 14px; flex-shrink: 0;
+        }
+        .pc-suggestion-name { color: var(--text); font-weight: 600; font-size: 14px; }
+        .pc-suggestion-detail { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+        .pc-btn {
+          width: 100%; padding: 14px 24px;
+          font-family: var(--font-head); font-size: 14px; font-weight: 700;
+          letter-spacing: 1.5px; text-transform: uppercase;
+          background: var(--accent); color: #0d0f12; border: none;
+          border-radius: 8px; cursor: pointer;
+          transition: all 0.2s ease-out;
+          box-shadow: 0 2px 8px rgba(232,180,74,0.2);
+        }
+        .pc-btn:hover:not(:disabled) {
+          transform: translateY(-1px) scale(1.01);
+          box-shadow: 0 4px 20px rgba(232,180,74,0.35);
+          background: #f5c55a;
+        }
+        .pc-btn:active:not(:disabled) { transform: scale(0.98); }
+        .pc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .pc-error {
+          margin-top: 16px; padding: 12px 16px;
+          background: rgba(232,90,74,0.08); border: 1px solid rgba(232,90,74,0.25);
+          border-radius: 8px; color: var(--danger); font-size: 13px;
+          display: flex; align-items: center; gap: 8px;
+          animation: fadeUp 0.2s ease;
+        }
+
+        .pc-result {
+          margin-top: 24px; border-radius: 12px; overflow: hidden;
+          border: 1px solid rgba(74,232,133,0.2);
+          animation: fadeUp 0.3s ease;
+        }
+        .pc-result-header {
+          background: rgba(74,232,133,0.06);
+          padding: 24px 24px 20px;
+          text-align: center;
+          border-bottom: 1px solid rgba(74,232,133,0.1);
+        }
+        .pc-result-label {
+          font-size: 10px; font-weight: 700; letter-spacing: 2px;
+          text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+        }
+        .pc-result-value {
+          font-family: var(--font-head); font-size: 48px; font-weight: 800;
+          color: var(--success); line-height: 1;
+        }
+        .pc-result-breakdown {
+          display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+        }
+        .pc-result-stat {
+          padding: 16px; text-align: center;
+          border-right: 1px solid rgba(74,232,133,0.1);
+          background: rgba(74,232,133,0.03);
+        }
+        .pc-result-stat:last-child { border-right: none; }
+        .pc-result-stat-label {
+          font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+          text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+        }
+        .pc-result-stat-value {
+          font-family: var(--font-head); font-size: 16px;
+          font-weight: 700; color: var(--text);
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        @media (max-width: 640px) {
+          .pc-card { padding: 20px; }
+          .pc-card::before { margin: -20px -20px 20px; }
+          .pc-config { grid-template-columns: 1fr; }
+          .pc-result-value { font-size: 36px; }
+          .pc-result-breakdown { grid-template-columns: 1fr; }
+          .pc-result-stat { border-right: none; border-bottom: 1px solid rgba(74,232,133,0.1); }
+          .pc-result-stat:last-child { border-bottom: none; }
         }
       `}</style>
 
-      <div className="form-card">
-        <div className="form-card-title">Vehicle Pickup Calculator</div>
+      <div className="pc-card">
+        <div className="pc-title">Vehicle Pickup Calculator</div>
 
-        <div className="pickup-calc-destination" style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-          <span><strong>Destination:</strong> {DESTINATION}</span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <strong>Rate:</strong> $
-            <input
-              type="number"
-              value={ratePerMile}
-              onChange={(e) => setRatePerMile(parseFloat(e.target.value) || 0)}
-              step="0.10"
-              min="0"
-              style={{
-                width: 64,
-                padding: "4px 8px",
-                background: "var(--bg)",
-                border: "1px solid var(--border)",
-                borderRadius: 4,
-                color: "var(--accent)",
-                fontFamily: "var(--font-head)",
-                fontSize: 15,
-                fontWeight: 700,
-                textAlign: "center",
-              }}
-            />
-            /mile
-          </span>
+        <div className="pc-config">
+          <div className="pc-config-item">
+            <div className="pc-config-label">Destination</div>
+            <div className="pc-config-value">{DESTINATION}</div>
+          </div>
+          <div className="pc-config-item">
+            <div className="pc-config-label">Rate per Mile</div>
+            <div className="pc-config-value">
+              $
+              <input
+                type="number"
+                className="pc-rate-input"
+                value={ratePerMile}
+                onChange={(e) => setRatePerMile(parseFloat(e.target.value) || 0)}
+                step="0.10"
+                min="0"
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="field">
-          <label>Vehicle Location</label>
-          <div className="pickup-calc-autocomplete">
+        <div className="pc-input-section">
+          <label className="pc-label">Vehicle Location</label>
+          <div className="pc-autocomplete">
             <input
+              className="pc-input"
               type="text"
-              placeholder="Enter city, state or full address"
+              placeholder="Enter city, state or full address..."
               value={location}
               onChange={(e) => {
                 setLocation(e.target.value);
@@ -337,7 +422,7 @@ export default function PickupCalculator() {
               autoComplete="off"
             />
             {suggestions.length > 0 && (
-              <div className="pickup-calc-suggestions" ref={suggestionsRef}>
+              <div className="pc-suggestions" ref={suggestionsRef}>
                 {suggestions.map((item, index) => {
                   const address = item.address || {};
                   let primaryText = "";
@@ -361,19 +446,22 @@ export default function PickupCalculator() {
                   return (
                     <div
                       key={index}
-                      className={`pickup-calc-suggestion ${
+                      className={`pc-suggestion ${
                         index === selectedSuggestionIndex ? "active" : ""
                       }`}
                       onClick={() => selectSuggestion(item)}
                     >
-                      <div className="pickup-calc-suggestion-name">
-                        {primaryText}
+                      <div className="pc-suggestion-icon">
+                        {address.city || address.town ? "🏙" : "📍"}
                       </div>
-                      {secondaryText && (
-                        <div className="pickup-calc-suggestion-details">
-                          {secondaryText}
-                        </div>
-                      )}
+                      <div>
+                        <div className="pc-suggestion-name">{primaryText}</div>
+                        {secondaryText && (
+                          <div className="pc-suggestion-detail">
+                            {secondaryText}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -383,41 +471,40 @@ export default function PickupCalculator() {
         </div>
 
         <button
-          className="btn btn-primary"
+          className="pc-btn"
           onClick={handleCalculate}
           disabled={loading}
-          style={{ marginTop: 16 }}
         >
-          {loading ? "Calculating..." : "Calculate Travel Cost →"}
+          {loading ? "Calculating..." : "Calculate Travel Cost"}
         </button>
 
         {error && (
-          <div
-            style={{
-              marginTop: 16,
-              padding: "12px 16px",
-              background: "rgba(232, 90, 74, 0.1)",
-              border: "1px solid rgba(232, 90, 74, 0.3)",
-              borderRadius: 6,
-              color: "var(--danger)",
-              fontSize: 13,
-            }}
-          >
-            {error}
+          <div className="pc-error">
+            <span>!</span> {error}
           </div>
         )}
 
         {result && (
-          <div className="pickup-calc-result">
-            <div className="pickup-calc-result-label">Total Travel Cost</div>
-            <div className="pickup-calc-result-value">${result.cost}</div>
-            <div className="pickup-calc-result-details">
-              <strong>Distance:</strong> {result.distance.toLocaleString()}{" "}
-              miles
-              <br />
-              <strong>From:</strong> {result.from}
-              <br />
-              <strong>To:</strong> {DESTINATION}
+          <div className="pc-result">
+            <div className="pc-result-header">
+              <div className="pc-result-label">Estimated Travel Cost</div>
+              <div className="pc-result-value">${result.cost.toLocaleString()}</div>
+            </div>
+            <div className="pc-result-breakdown">
+              <div className="pc-result-stat">
+                <div className="pc-result-stat-label">Distance</div>
+                <div className="pc-result-stat-value">{result.distance.toLocaleString()} mi</div>
+              </div>
+              <div className="pc-result-stat">
+                <div className="pc-result-stat-label">From</div>
+                <div className="pc-result-stat-value" title={result.from}>
+                  {result.from.split(",")[0]}
+                </div>
+              </div>
+              <div className="pc-result-stat">
+                <div className="pc-result-stat-label">To</div>
+                <div className="pc-result-stat-value">{DESTINATION}</div>
+              </div>
             </div>
           </div>
         )}
