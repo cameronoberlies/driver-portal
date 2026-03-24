@@ -3811,6 +3811,14 @@ function AdminTrips({
       setTrips((prev) => prev.map((t) => (t.id === data.id ? data : t)));
   }
 
+  async function handleDeleteTrip(trip) {
+    if (!confirm(`Delete trip ${trip.crm_id || trip.city || trip.id}? This cannot be undone.`)) return;
+    setActing(trip.id);
+    const { error } = await supabase.from("trips").delete().eq("id", trip.id);
+    setActing(null);
+    if (!error) setTrips((prev) => prev.filter((t) => t.id !== trip.id));
+  }
+
   const active = trips.filter((t) =>
     ["pending", "in_progress", "completed"].includes(t.status),
   );
@@ -3977,7 +3985,21 @@ function AdminTrips({
                             )
                           : "—"}
                       </td>
-                      <td>
+                      <td style={{ display: "flex", gap: 8 }}>
+                        {trip.status === "pending" && (
+                          <button
+                            className="btn-edit"
+                            style={{
+                              background: "rgba(232,90,74,0.1)",
+                              color: "var(--danger)",
+                              borderColor: "var(--danger)",
+                            }}
+                            onClick={() => handleDeleteTrip(trip)}
+                            disabled={acting === trip.id}
+                          >
+                            {acting === trip.id ? "Deleting..." : "✕ Delete"}
+                          </button>
+                        )}
                         {trip.status === "in_progress" && (
                           <button
                             className="btn-edit"
