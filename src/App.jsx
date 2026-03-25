@@ -593,6 +593,19 @@ function Topbar({ user, onLogout }) {
                 ADMIN
               </span>
             )}
+            {user.role === "caller" && (
+              <span
+                style={{
+                  color: "var(--accent2)",
+                  marginLeft: 6,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                }}
+              >
+                CALLER
+              </span>
+            )}
           </div>
           <button
             className="btn btn-ghost"
@@ -1551,17 +1564,113 @@ function exportCSV(entries, profiles) {
   URL.revokeObjectURL(url);
 }
 
+// ─── MINI LINE CHART (SVG) ────────────────────────────────────────────────────
+function MiniLineChart({ datasets, labels, height = 200 }) {
+  const padding = { top: 20, right: 16, bottom: 32, left: 56 };
+  const w = 600;
+  const h = height;
+  const plotW = w - padding.left - padding.right;
+  const plotH = h - padding.top - padding.bottom;
+
+  const allValues = datasets.flatMap((ds) => ds.data);
+  const maxVal = Math.max(...allValues, 1);
+  const minVal = 0;
+  const range = maxVal - minVal || 1;
+
+  function toX(i, len) { return padding.left + (i / (len - 1)) * plotW; }
+  function toY(v) { return padding.top + plotH - ((v - minVal) / range) * plotH; }
+
+  const gridLines = 4;
+  const gridVals = Array.from({ length: gridLines + 1 }, (_, i) => minVal + (range / gridLines) * i);
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "auto" }}>
+      {/* Grid lines */}
+      {gridVals.map((v, i) => (
+        <g key={i}>
+          <line x1={padding.left} y1={toY(v)} x2={w - padding.right} y2={toY(v)} stroke="var(--border)" strokeWidth="1" />
+          <text x={padding.left - 8} y={toY(v) + 4} fill="var(--muted)" fontSize="10" fontWeight="700" textAnchor="end" fontFamily="var(--font-body)">
+            ${Math.round(v)}
+          </text>
+        </g>
+      ))}
+      {/* X labels */}
+      {labels.map((label, i) => (
+        <text key={i} x={toX(i, labels.length)} y={h - 6} fill="var(--muted)" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="var(--font-body)">
+          {label}
+        </text>
+      ))}
+      {/* Lines */}
+      {datasets.map((ds, di) => {
+        const points = ds.data.map((v, i) => `${toX(i, ds.data.length)},${toY(v)}`).join(" ");
+        return (
+          <g key={di}>
+            <polyline fill="none" stroke={ds.color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={points} />
+            {ds.data.map((v, i) => (
+              <circle key={i} cx={toX(i, ds.data.length)} cy={toY(v)} r="3.5" fill={ds.color} stroke="var(--surface)" strokeWidth="2" />
+            ))}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ─── MINI PIE CHART (SVG) ─────────────────────────────────────────────────────
+function MiniPieChart({ data }) {
+  const size = 200;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 80;
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
+
+  let currentAngle = -Math.PI / 2;
+  const slices = data.map((d) => {
+    const angle = (d.value / total) * Math.PI * 2;
+    const startAngle = currentAngle;
+    const endAngle = currentAngle + angle;
+    currentAngle = endAngle;
+    const x1 = cx + r * Math.cos(startAngle);
+    const y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(endAngle);
+    const y2 = cy + r * Math.sin(endAngle);
+    const largeArc = angle > Math.PI ? 1 : 0;
+    const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+    return { ...d, path };
+  });
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 32, justifyContent: "center", flexWrap: "wrap" }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {slices.map((s, i) => (
+          <path key={i} d={s.path} fill={s.color} stroke="var(--surface)" strokeWidth="2" />
+        ))}
+      </svg>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {data.map((d, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 12, height: 12, borderRadius: 2, background: d.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: d.color }}>{d.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── MILEAGE COST REPORT ──────────────────────────────────────────────────────
 function MileageCostReport({
   entries,
   drivers,
   allProfiles,
+  trips,
   thisMonth,
   wkStart,
   wkEnd,
 }) {
   const [reportType, setReportType] = useState("weekly");
   const [selectedDriver, setSelectedDriver] = useState("all");
+  const [activeChart, setActiveChart] = useState(0);
 
   const filtered = entries.filter((e) => {
     const inPeriod =
@@ -1575,24 +1684,98 @@ function MileageCostReport({
     return inPeriod && inDriver;
   });
 
-  const totalActual = filtered.reduce(
-    (s, e) => s + Number(e.actual_cost ?? 0),
-    0,
-  );
-  const totalEstimated = filtered.reduce(
-    (s, e) => s + Number(e.estimated_cost ?? 0),
-    0,
-  );
+  const weekFiltered = entries.filter((e) => {
+    const d = new Date(e.date + "T12:00:00");
+    return d >= wkStart && d <= wkEnd;
+  });
+
+  const totalActual = filtered.reduce((s, e) => s + Number(e.actual_cost ?? 0), 0);
+  const totalEstimated = filtered.reduce((s, e) => s + Number(e.estimated_cost ?? 0), 0);
   const totalMiles = filtered.reduce((s, e) => s + Number(e.miles ?? 0), 0);
   const variance = totalActual - totalEstimated;
 
   const periodLabel =
     reportType === "weekly"
       ? `${wkStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${wkEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
-      : new Date(thisMonth + "-01").toLocaleDateString("en-US", {
-          month: "long",
-          year: "numeric",
-        });
+      : new Date(thisMonth + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  // ── Helper: get week bounds N weeks ago ──
+  function getWeekBoundsAgo(weeksAgo) {
+    const d = new Date();
+    d.setDate(d.getDate() - weeksAgo * 7);
+    return getWeekBounds(d);
+  }
+
+  // ── Chart 1: Cost Variance Trend (8 weeks) ──
+  const varianceTrend = (() => {
+    const weeks = [];
+    for (let i = 7; i >= 0; i--) {
+      const { start, end } = getWeekBoundsAgo(i);
+      const wkEntries = entries.filter((e) => {
+        const d = new Date(e.date + "T12:00:00");
+        return d >= start && d <= end;
+      });
+      weeks.push({
+        label: start.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        actual: wkEntries.reduce((t, e) => t + Number(e.actual_cost ?? 0), 0),
+        estimated: wkEntries.reduce((t, e) => t + Number(e.estimated_cost ?? 0), 0),
+      });
+    }
+    return weeks;
+  })();
+
+  // ── Chart 2: Weekly Mileage Trend (8 weeks) ──
+  const milesTrend = (() => {
+    const weeks = [];
+    for (let i = 7; i >= 0; i--) {
+      const { start, end } = getWeekBoundsAgo(i);
+      const wkEntries = entries.filter((e) => {
+        const d = new Date(e.date + "T12:00:00");
+        return d >= start && d <= end;
+      });
+      weeks.push({
+        label: start.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        miles: wkEntries.reduce((t, e) => t + Number(e.miles ?? 0), 0),
+      });
+    }
+    return weeks;
+  })();
+
+  // ── Chart 3: Cost per Mile Efficiency ──
+  const efficiencyData = drivers.map((d) => {
+    const de = weekFiltered.filter((e) => e.driver_id === d.id);
+    const miles = de.reduce((t, e) => t + Number(e.miles ?? 0), 0);
+    const actual = de.reduce((t, e) => t + Number(e.actual_cost ?? 0), 0);
+    const costPerMile = miles > 0 ? actual / miles : 0;
+    return { name: d.name, miles, actual, costPerMile };
+  }).filter((d) => d.miles > 0).sort((a, b) => a.costPerMile - b.costPerMile);
+
+  const avgCostPerMile = efficiencyData.length > 0
+    ? efficiencyData.reduce((t, e) => t + e.costPerMile, 0) / efficiencyData.length
+    : 0;
+
+  // ── Chart 4: Trip Type Breakdown (pie) ──
+  const tripTypeData = (() => {
+    const weekTrips = (trips ?? []).filter((t) => {
+      if (!t.actual_start) return false;
+      const d = new Date(t.actual_start);
+      return d >= wkStart && d <= wkEnd;
+    });
+    const flyCount = weekTrips.filter((t) => t.trip_type === "fly").length;
+    const driveCount = weekTrips.filter((t) => t.trip_type === "drive").length;
+    if (flyCount === 0 && driveCount === 0) return [];
+    return [
+      flyCount > 0 && { label: `Fly (${flyCount})`, value: flyCount, color: "var(--accent2)" },
+      driveCount > 0 && { label: `Drive (${driveCount})`, value: driveCount, color: "var(--accent)" },
+    ].filter(Boolean);
+  })();
+
+  const chartTabs = [
+    { key: 0, label: "TREND" },
+    { key: 1, label: "MILES" },
+    { key: 2, label: "EFFICIENCY" },
+    { key: 3, label: "TYPES" },
+  ];
 
   return (
     <div className="fade-in">
@@ -1608,24 +1791,18 @@ function MileageCostReport({
         >
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Period</label>
-            <select
-              value={reportType}
-              onChange={(e) => setReportType(e.target.value)}
-            >
+            <select value={reportType} onChange={(e) => setReportType(e.target.value)}>
               <option value="weekly">This Week</option>
               <option value="monthly">This Month</option>
             </select>
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Driver</label>
-            <select
-              value={selectedDriver}
-              onChange={(e) => setSelectedDriver(e.target.value)}
-            >
+            <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)}>
               <option value="all">All Drivers</option>
               {drivers.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.name}{d.willing_to_fly ? ' (F)' : ''}
+                  {d.name}{d.willing_to_fly ? " (F)" : ""}
                 </option>
               ))}
             </select>
@@ -1643,35 +1820,10 @@ function MileageCostReport({
       {/* Summary Cards */}
       <div className="stats-grid" style={{ marginBottom: 20 }}>
         {[
-          {
-            label: "Total Miles",
-            value: totalMiles + " mi",
-            cls: "",
-            sub: periodLabel,
-          },
-          {
-            label: "Total Actual Cost",
-            value: formatCurrency(totalActual),
-            cls: "danger",
-            sub: `${filtered.length} trips`,
-          },
-          {
-            label: "Total Estimated Cost",
-            value: formatCurrency(totalEstimated),
-            cls: "blue",
-            sub: `${filtered.length} trips`,
-          },
-          {
-            label: "Variance",
-            value: (variance >= 0 ? "+" : "") + formatCurrency(variance),
-            cls: variance > 0 ? "danger" : "success",
-            sub:
-              variance > 0
-                ? "Over estimate"
-                : variance < 0
-                  ? "Under estimate"
-                  : "On target",
-          },
+          { label: "Total Miles", value: totalMiles.toFixed(1) + " mi", cls: "", sub: periodLabel },
+          { label: "Total Actual Cost", value: formatCurrency(totalActual), cls: "danger", sub: `${filtered.length} trips` },
+          { label: "Total Estimated Cost", value: formatCurrency(totalEstimated), cls: "blue", sub: `${filtered.length} trips` },
+          { label: "Variance", value: (variance >= 0 ? "+" : "") + formatCurrency(variance), cls: variance > 0 ? "danger" : "success", sub: variance > 0 ? "Over estimate" : variance < 0 ? "Under estimate" : "On target" },
         ].map((s, i) => (
           <div key={i} className={`stat-card fade-in fade-in-${i + 1}`}>
             <div className="stat-label">{s.label}</div>
@@ -1681,7 +1833,175 @@ function MileageCostReport({
         ))}
       </div>
 
-      {/* Per-driver breakdown */}
+      {/* Chart Tabs */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {chartTabs.map((ct) => (
+          <button
+            key={ct.key}
+            onClick={() => setActiveChart(ct.key)}
+            style={{
+              flex: 1,
+              padding: "10px 0",
+              background: activeChart === ct.key ? "rgba(232,180,74,0.1)" : "var(--surface)",
+              border: `1px solid ${activeChart === ct.key ? "rgba(232,180,74,0.3)" : "var(--border)"}`,
+              borderRadius: "var(--radius-sm)",
+              color: activeChart === ct.key ? "var(--accent)" : "var(--muted)",
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 1.5,
+              fontFamily: "var(--font-head)",
+              cursor: "pointer",
+              transition: "all 0.15s",
+              textTransform: "uppercase",
+            }}
+          >
+            {ct.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Chart Container */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: 24, marginBottom: 28 }}>
+        {activeChart === 0 && (
+          <div>
+            <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: 2, fontWeight: 700, marginBottom: 16, textAlign: "center", textTransform: "uppercase" }}>
+              Cost Variance Trend (8 Weeks)
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", gap: 20, marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 12, height: 3, borderRadius: 2, background: "var(--danger)" }} />
+                <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>Actual</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 12, height: 3, borderRadius: 2, background: "var(--accent)" }} />
+                <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>Estimated</span>
+              </div>
+            </div>
+            <MiniLineChart
+              labels={varianceTrend.map((w) => w.label)}
+              datasets={[
+                { data: varianceTrend.map((w) => w.actual), color: "var(--danger)" },
+                { data: varianceTrend.map((w) => w.estimated), color: "var(--accent)" },
+              ]}
+            />
+          </div>
+        )}
+
+        {activeChart === 1 && (
+          <div>
+            <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: 2, fontWeight: 700, marginBottom: 16, textAlign: "center", textTransform: "uppercase" }}>
+              Weekly Mileage Trend (8 Weeks)
+            </div>
+            <MiniLineChart
+              labels={milesTrend.map((w) => w.label)}
+              datasets={[
+                { data: milesTrend.map((w) => w.miles), color: "var(--accent2)" },
+              ]}
+            />
+          </div>
+        )}
+
+        {activeChart === 2 && (
+          <div>
+            <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: 2, fontWeight: 700, marginBottom: 16, textAlign: "center", textTransform: "uppercase" }}>
+              Cost per Mile Efficiency
+            </div>
+            {efficiencyData.length === 0 ? (
+              <div style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: "40px 0" }}>No data this week</div>
+            ) : (
+              <div style={{ display: "grid", gap: 12 }}>
+                {efficiencyData.map((d) => {
+                  const isEfficient = d.costPerMile <= avgCostPerMile;
+                  return (
+                    <div key={d.name} style={{
+                      background: "var(--bg)",
+                      border: "1px solid var(--border)",
+                      borderLeft: `3px solid ${isEfficient ? "var(--success)" : "var(--danger)"}`,
+                      borderRadius: "var(--radius-sm)",
+                      padding: "14px 18px",
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>{d.name}</span>
+                        <span style={{ fontSize: 16, fontWeight: 900, color: isEfficient ? "var(--success)" : "var(--danger)" }}>
+                          {formatCurrency(d.costPerMile)}/mi
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: 16 }}>
+                        <span style={{ fontSize: 11, color: "var(--muted)" }}>{d.miles.toFixed(1)} mi</span>
+                        <span style={{ fontSize: 11, color: "var(--muted)" }}>{formatCurrency(d.actual)} total</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeChart === 3 && (
+          <div>
+            <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: 2, fontWeight: 700, marginBottom: 16, textAlign: "center", textTransform: "uppercase" }}>
+              Trip Type Breakdown (This Week)
+            </div>
+            {tripTypeData.length === 0 ? (
+              <div style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: "40px 0" }}>No trips this week</div>
+            ) : (
+              <MiniPieChart data={tripTypeData} />
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Driver Breakdown Cards */}
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "var(--muted)", marginBottom: 12, textTransform: "uppercase" }}>
+        By Driver This Week
+      </div>
+      <div style={{ display: "grid", gap: 12, marginBottom: 28 }}>
+        {drivers.map((driver) => {
+          const de = weekFiltered.filter((e) => e.driver_id === driver.id);
+          const actual = de.reduce((t, e) => t + Number(e.actual_cost ?? 0), 0);
+          const estimated = de.reduce((t, e) => t + Number(e.estimated_cost ?? 0), 0);
+          const miles = de.reduce((t, e) => t + Number(e.miles ?? 0), 0);
+          const v = actual - estimated;
+          if (de.length === 0) return null;
+          return (
+            <div key={driver.id} style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderLeft: "3px solid var(--accent2)",
+              borderRadius: "var(--radius-sm)",
+              padding: "16px 20px",
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", marginBottom: 12 }}>
+                {driver.name}
+                {driver.willing_to_fly && <span style={{ color: "var(--accent)", marginLeft: 8, fontSize: 12, fontWeight: 700 }}>(F)</span>}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 }}>MILES</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>{miles.toFixed(1)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 }}>ACTUAL</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>{formatCurrency(actual)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 }}>ESTIMATED</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>{formatCurrency(estimated)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 }}>VARIANCE</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: v > 0 ? "var(--danger)" : "var(--success)" }}>
+                    {v >= 0 ? "+" : ""}{formatCurrency(v)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Per-entry table */}
       <div className="table-wrap">
         <div className="table-head">
           <div className="table-head-title">Cost Breakdown by Trip</div>
@@ -1711,8 +2031,7 @@ function MileageCostReport({
                 .sort((a, b) => new Date(b.date) - new Date(a.date))
                 .map((e) => {
                   const driver = allProfiles.find((u) => u.id === e.driver_id);
-                  const v =
-                    Number(e.actual_cost ?? 0) - Number(e.estimated_cost ?? 0);
+                  const v = Number(e.actual_cost ?? 0) - Number(e.estimated_cost ?? 0);
                   return (
                     <tr key={e.id}>
                       <td style={{ fontWeight: 600 }}>
@@ -1721,28 +2040,11 @@ function MileageCostReport({
                       </td>
                       <td>{formatDate(e.date)}</td>
                       <td>{e.city}</td>
-                      <td style={{ color: "var(--muted)" }}>
-                        {e.miles ?? 0} mi
-                      </td>
-                      <td style={{ color: "var(--danger)", fontWeight: 600 }}>
-                        {formatCurrency(e.actual_cost ?? 0)}
-                      </td>
-                      <td style={{ color: "var(--accent)", fontWeight: 600 }}>
-                        {formatCurrency(e.estimated_cost ?? 0)}
-                      </td>
-                      <td
-                        style={{
-                          color:
-                            v > 0
-                              ? "var(--danger)"
-                              : v < 0
-                                ? "var(--success)"
-                                : "var(--muted)",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {v >= 0 ? "+" : ""}
-                        {formatCurrency(v)}
+                      <td style={{ color: "var(--muted)" }}>{e.miles ?? 0} mi</td>
+                      <td style={{ color: "var(--danger)", fontWeight: 600 }}>{formatCurrency(e.actual_cost ?? 0)}</td>
+                      <td style={{ color: "var(--accent)", fontWeight: 600 }}>{formatCurrency(e.estimated_cost ?? 0)}</td>
+                      <td style={{ color: v > 0 ? "var(--danger)" : v < 0 ? "var(--success)" : "var(--muted)", fontWeight: 600 }}>
+                        {v >= 0 ? "+" : ""}{formatCurrency(v)}
                       </td>
                     </tr>
                   );
@@ -2554,6 +2856,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
 
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
 function AdminDashboard({
+  user,
   allProfiles,
   setAllProfiles,
   entries,
@@ -2563,6 +2866,7 @@ function AdminDashboard({
   prefillData,
   onPrefillConsumed,
 }) {
+  const isAdmin = user.role === "admin";
   const drivers = allProfiles.filter((u) => u.role === "driver");
   const [tab, setTab] = useState(prefillData ? "trips" : "overview");
   const [selectedDriver, setSelectedDriver] = useState(null);
@@ -2698,9 +3002,9 @@ function AdminDashboard({
         />
       )}
 
-      <div className="page-title fade-in">Admin Dashboard</div>
+      <div className="page-title fade-in">{isAdmin ? "Admin Dashboard" : "Dashboard"}</div>
       <div className="page-sub fade-in">
-        Manage driver entries and view all accounts
+        {isAdmin ? "Manage driver entries and view all accounts" : "View driver entries and trip data"}
       </div>
       <PayPeriodBanner />
 
@@ -2708,15 +3012,16 @@ function AdminDashboard({
         {[
           { key: "overview", icon: "📊", label: "Overview" },
           { key: "trips", icon: "🚗", label: "Trips" },
-          { key: "log entry", icon: "📝", label: "Log Entry" },
+          isAdmin && { key: "log entry", icon: "📝", label: "Log Entry" },
           { key: "all entries", icon: "📋", label: "All Entries" },
           { key: "mileage costs", icon: "⛽", label: "Mileage Costs" },
           { key: "availability", icon: "📅", label: "Availability" },
+          { key: "capacity", icon: "📋", label: "Capacity" },
           { key: "live drivers", icon: "📍", label: "Live Drivers" },
-          { key: "manage users", icon: "👥", label: "Manage Users" },
+          isAdmin && { key: "manage users", icon: "👥", label: "Manage Users" },
           { key: "pickup calculator", icon: "🧮", label: "Pickup Calc" },
           { key: "downloads", icon: "⬇", label: "Downloads" },
-        ].map((t) => (
+        ].filter(Boolean).map((t) => (
           <button
             key={t.key}
             className={`tab ${tab === t.key ? "active" : ""}`}
@@ -3058,7 +3363,7 @@ function AdminDashboard({
                   <th>Hours</th>
                   <th>Miles</th>
                   <th>Recon</th>
-                  <th></th>
+                  {isAdmin && <th></th>}
                 </tr>
               </thead>
               <tbody>
@@ -3113,6 +3418,7 @@ function AdminDashboard({
                             {e.recon_missed ? "MISSED" : "OK"}
                           </span>
                         </td>
+                        {isAdmin && (
                         <td>
                           <button
                             className="btn-edit"
@@ -3121,6 +3427,7 @@ function AdminDashboard({
                             Edit
                           </button>
                         </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -3138,6 +3445,7 @@ function AdminDashboard({
           setEntries={setEntries}
           prefillData={prefillData}
           onPrefillConsumed={onPrefillConsumed}
+          isAdmin={isAdmin}
         />
       )}
 
@@ -3146,6 +3454,7 @@ function AdminDashboard({
           entries={entries}
           drivers={drivers}
           allProfiles={allProfiles}
+          trips={trips}
           thisMonth={thisMonth}
           wkStart={wkStart}
           wkEnd={wkEnd}
@@ -3153,6 +3462,7 @@ function AdminDashboard({
       )}
 
       {tab === "availability" && <AdminAvailability drivers={drivers} />}
+      {tab === "capacity" && <CapacityCalendar isAdmin={isAdmin} />}
       {tab === "live drivers" && <LiveDriversMap drivers={drivers} />}
       {tab === "pickup calculator" && <PickupCalculator />}
       {tab === "downloads" && (
@@ -3793,6 +4103,7 @@ function AdminTrips({
   setEntries,
   prefillData,
   onPrefillConsumed,
+  isAdmin,
 }) {
   const [view, setView] = useState(prefillData ? "create" : "active"); // active | all | create
   const [finalizingTrip, setFinalizingTrip] = useState(null);
@@ -3865,8 +4176,8 @@ function AdminTrips({
         {[
           ["active", `Active (${active.length})`],
           ["all", `All Trips (${all.length})`],
-          ["create", "＋ Create Trip"],
-        ].map(([v, label]) => (
+          isAdmin && ["create", "＋ Create Trip"],
+        ].filter(Boolean).map(([v, label]) => (
           <button
             key={v}
             className={`btn ${view === v ? "btn-primary" : "btn-ghost"}`}
@@ -3986,7 +4297,7 @@ function AdminTrips({
                           : "—"}
                       </td>
                       <td style={{ display: "flex", gap: 8 }}>
-                        {trip.status === "pending" && (
+                        {isAdmin && trip.status === "pending" && (
                           <button
                             className="btn-edit"
                             style={{
@@ -4000,7 +4311,7 @@ function AdminTrips({
                             {acting === trip.id ? "Deleting..." : "✕ Delete"}
                           </button>
                         )}
-                        {trip.status === "in_progress" && (
+                        {isAdmin && trip.status === "in_progress" && (
                           <button
                             className="btn-edit"
                             style={{
@@ -4014,7 +4325,7 @@ function AdminTrips({
                             {acting === trip.id ? "Ending..." : "⏹ End Trip"}
                           </button>
                         )}
-                        {trip.status === "completed" && (
+                        {isAdmin && trip.status === "completed" && (
                           <button
                             className="btn-edit"
                             style={{
@@ -4299,6 +4610,257 @@ function DriverTrips({ driver, trips, setTrips }) {
   );
 }
 
+// ─── CAPACITY CALENDAR ────────────────────────────────────────────────────────
+function CapacityCalendar({ isAdmin }) {
+  const [capacityData, setCapacityData] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(null);
+  const [error, setError] = useState(false);
+
+  function getRollingWeek() {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+  }
+  const week = getRollingWeek();
+
+  function toDateStr(date) { return date.toISOString().slice(0, 10); }
+  function toDisplayLabel(date) {
+    return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  }
+  function isTodayCheck(date) {
+    const t = new Date();
+    return date.getDate() === t.getDate() && date.getMonth() === t.getMonth() && date.getFullYear() === t.getFullYear();
+  }
+
+  async function loadCapacity() {
+    setError(false);
+    setLoading(true);
+    try {
+      const dateStrs = week.map(toDateStr);
+      const { data, error: err } = await supabase
+        .from("daily_capacity")
+        .select("*")
+        .in("date", dateStrs);
+      if (err) throw err;
+      const map = {};
+      dateStrs.forEach((d) => {
+        const row = data?.find((r) => r.date === d);
+        map[d] = row ?? { date: d, flights_total: 0, flights_remaining: 0, drives_total: 0, drives_remaining: 0, notes: "", is_full: false };
+      });
+      setCapacityData(map);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadCapacity(); }, []);
+
+  async function saveDay(dateStr) {
+    const row = capacityData[dateStr];
+    if (!row) return;
+    setSaving(dateStr);
+    try {
+      const flightsTotal = Number(row.flights_total) || 0;
+      const drivesTotal = Number(row.drives_total) || 0;
+      const flightsRemaining = Math.min(Math.max(Number(row.flights_remaining) || 0, 0), flightsTotal);
+      const drivesRemaining = Math.min(Math.max(Number(row.drives_remaining) || 0, 0), drivesTotal);
+      const isReopening = flightsRemaining > 0 || drivesRemaining > 0;
+
+      const { error: err } = await supabase
+        .from("daily_capacity")
+        .upsert({
+          date: dateStr,
+          flights_total: flightsTotal,
+          flights_remaining: flightsRemaining,
+          drives_total: drivesTotal,
+          drives_remaining: drivesRemaining,
+          notes: row.notes || null,
+          updated_at: new Date().toISOString(),
+          ...(isReopening ? { full_notification_sent_at: null } : {}),
+        }, { onConflict: "date" });
+      if (err) throw err;
+      await loadCapacity();
+    } catch {
+      // silent fail, data reloads
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  function updateField(dateStr, field, value) {
+    setCapacityData((prev) => ({
+      ...prev,
+      [dateStr]: { ...prev[dateStr], [field]: value },
+    }));
+  }
+
+  function getDayStatus(row) {
+    if (!row || (row.flights_total === 0 && row.drives_total === 0)) return "empty";
+    if (row.is_full) return "full";
+    if (row.flights_remaining === 0 || row.drives_remaining === 0) return "partial";
+    return "open";
+  }
+
+  const statusColors = { open: "var(--success)", partial: "var(--accent)", full: "var(--danger)", empty: "var(--muted)" };
+  const statusLabels = { open: "OPEN", partial: "FILLING", full: "FULL", empty: "—" };
+
+  if (loading) return <div style={{ color: "var(--muted)", padding: 24 }}>Loading capacity...</div>;
+  if (error) return (
+    <div style={{ color: "var(--muted)", padding: 24 }}>
+      Failed to load capacity.{" "}
+      <button className="btn btn-ghost" style={{ padding: "4px 12px", fontSize: 11 }} onClick={loadCapacity}>Retry</button>
+    </div>
+  );
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "var(--muted)", marginBottom: 16 }}>
+        Capacity Calendar — Next 7 Days
+      </div>
+      {!isAdmin && (
+        <div style={{ background: "rgba(232,180,74,0.08)", border: "1px solid rgba(232,180,74,0.25)", borderRadius: "var(--radius-sm)", padding: "10px 16px", marginBottom: 16, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--accent)", textAlign: "center", textTransform: "uppercase" }}>
+          Read Only — Contact admin to update capacity
+        </div>
+      )}
+      <div style={{ display: "grid", gap: 12 }}>
+        {week.map((date) => {
+          const dateStr = toDateStr(date);
+          const row = capacityData[dateStr];
+          const status = getDayStatus(row);
+          const today = isTodayCheck(date);
+          const isSaving = saving === dateStr;
+
+          return (
+            <div key={dateStr} style={{
+              background: "var(--surface)",
+              border: `1px solid ${today ? "rgba(232,180,74,0.3)" : "var(--border)"}`,
+              borderLeft: `3px solid ${status === "full" ? "var(--danger)" : today ? "var(--accent)" : "var(--accent2)"}`,
+              borderRadius: "var(--radius-md)",
+              padding: "18px 22px",
+              opacity: status === "full" ? 0.85 : 1,
+              transition: "border-color 0.2s",
+            }}>
+              {/* Day header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: today ? "var(--text)" : "var(--muted)", textTransform: "uppercase" }}>
+                    {toDisplayLabel(date).toUpperCase()}
+                  </span>
+                  {today && (
+                    <span style={{ fontSize: 9, fontWeight: 900, color: "var(--accent)", background: "rgba(232,180,74,0.12)", padding: "2px 8px", borderRadius: 4, letterSpacing: 1 }}>TODAY</span>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: statusColors[status] }} />
+                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1, color: statusColors[status] }}>{statusLabels[status]}</span>
+                </div>
+              </div>
+
+              {/* Slots */}
+              <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
+                {/* Flights */}
+                <div style={{ flex: 1, textAlign: "center" }}>
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>✈</div>
+                  {isAdmin ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                      <input
+                        type="number"
+                        style={{ width: 48, height: 40, textAlign: "center", fontSize: 20, fontWeight: 800, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", outline: "none" }}
+                        value={row?.flights_total ?? 0}
+                        onChange={(e) => updateField(dateStr, "flights_total", e.target.value)}
+                        onBlur={() => saveDay(dateStr)}
+                      />
+                      <span style={{ fontSize: 18, color: "var(--muted)", fontWeight: 300 }}>/</span>
+                      <input
+                        type="number"
+                        style={{ width: 48, height: 40, textAlign: "center", fontSize: 20, fontWeight: 800, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--accent)", outline: "none" }}
+                        value={row?.flights_remaining ?? 0}
+                        onChange={(e) => updateField(dateStr, "flights_remaining", e.target.value)}
+                        onBlur={() => saveDay(dateStr)}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>
+                      {row?.flights_remaining ?? 0} <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: 14 }}>of</span> {row?.flights_total ?? 0}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1, fontWeight: 700, marginTop: 4 }}>
+                    {isAdmin ? "TOTAL / LEFT" : "REMAINING"}
+                  </div>
+                </div>
+
+                <div style={{ width: 1, height: 48, background: "var(--border)" }} />
+
+                {/* Drives */}
+                <div style={{ flex: 1, textAlign: "center" }}>
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>🚗</div>
+                  {isAdmin ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                      <input
+                        type="number"
+                        style={{ width: 48, height: 40, textAlign: "center", fontSize: 20, fontWeight: 800, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", outline: "none" }}
+                        value={row?.drives_total ?? 0}
+                        onChange={(e) => updateField(dateStr, "drives_total", e.target.value)}
+                        onBlur={() => saveDay(dateStr)}
+                      />
+                      <span style={{ fontSize: 18, color: "var(--muted)", fontWeight: 300 }}>/</span>
+                      <input
+                        type="number"
+                        style={{ width: 48, height: 40, textAlign: "center", fontSize: 20, fontWeight: 800, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--accent)", outline: "none" }}
+                        value={row?.drives_remaining ?? 0}
+                        onChange={(e) => updateField(dateStr, "drives_remaining", e.target.value)}
+                        onBlur={() => saveDay(dateStr)}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text)" }}>
+                      {row?.drives_remaining ?? 0} <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: 14 }}>of</span> {row?.drives_total ?? 0}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1, fontWeight: 700, marginTop: 4 }}>
+                    {isAdmin ? "TOTAL / LEFT" : "REMAINING"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Saving indicator */}
+              {isSaving && (
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 8 }}>Saving...</div>
+              )}
+
+              {/* Full banner */}
+              {status === "full" && (
+                <div style={{ background: "rgba(232,90,74,0.1)", borderRadius: 4, padding: "6px 12px", marginTop: 10, textAlign: "center" }}>
+                  <span style={{ color: "var(--danger)", fontSize: 10, fontWeight: 900, letterSpacing: 2 }}>DAY FULL</span>
+                </div>
+              )}
+
+              {/* Notes */}
+              {isAdmin ? (
+                <input
+                  type="text"
+                  placeholder="Notes (optional)..."
+                  style={{ width: "100%", marginTop: 12, padding: "8px 12px", fontSize: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", outline: "none" }}
+                  value={row?.notes ?? ""}
+                  onChange={(e) => updateField(dateStr, "notes", e.target.value)}
+                  onBlur={() => saveDay(dateStr)}
+                />
+              ) : row?.notes ? (
+                <div style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic", marginTop: 10 }}>{row.notes}</div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── ADMIN AVAILABILITY ───────────────────────────────────────────────────────
 function AdminAvailability({ drivers }) {
   const weekStart = getNextWeekStart().toISOString().slice(0, 10);
@@ -4533,6 +5095,7 @@ export default function App() {
         .select("*")
         .order("date", { ascending: false });
       if (user.role === "driver") query = query.eq("driver_id", user.id);
+      // callers load all data like admins
       const { data: entryData } = await query;
       if (entryData) setEntries(entryData);
 
@@ -4581,6 +5144,7 @@ export default function App() {
   }
 
   const driverEntries = user?.role === "driver" ? entries : [];
+  const showAdminDashboard = user?.role === "admin" || user?.role === "caller";
 
   return (
     <div className="app">
@@ -4590,7 +5154,7 @@ export default function App() {
       ) : (
         <>
           <Topbar user={user} onLogout={handleLogout} />
-          {user.role === "driver" ? (
+          {!showAdminDashboard ? (
             <DriverDashboard
               driver={user}
               entries={driverEntries}
@@ -4601,6 +5165,7 @@ export default function App() {
             />
           ) : (
             <AdminDashboard
+              user={user}
               allProfiles={allProfiles}
               setAllProfiles={setAllProfiles}
               entries={entries}
