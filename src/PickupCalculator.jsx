@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 export default function PickupCalculator({ supabase }) {
-  const RATE_PER_MILE = 2.0;
+  const [ratePerMile, setRatePerMile] = useState(2.0);
   const DESTINATION = "Shelby, NC";
   const DEST_LAT = 35.2923;
   const DEST_LON = -81.5357;
@@ -167,7 +167,7 @@ export default function PickupCalculator({ supabase }) {
       const cached = await checkCache(loc);
       if (cached) {
         setFromCache(true);
-        setResult({ from: loc, distance: cached.distance, cost: cached.cost });
+        setResult({ from: loc, distance: cached.distance, cost: Math.round(cached.distance * ratePerMile) });
         setLoading(false);
         return;
       }
@@ -175,7 +175,7 @@ export default function PickupCalculator({ supabase }) {
       // Cache miss — calculate fresh
       const originCoords = coords || (await geocodeLocation(loc));
       const distance = await getDrivingDistance(originCoords);
-      const cost = Math.round(distance * RATE_PER_MILE);
+      const cost = Math.round(distance * ratePerMile);
 
       // Save to cache
       await saveToCache(loc, distance, cost);
@@ -285,9 +285,30 @@ export default function PickupCalculator({ supabase }) {
       <div className="form-card">
         <div className="form-card-title">Vehicle Pickup Calculator</div>
 
-        <div className="pickup-calc-destination">
-          <strong>Destination:</strong> {DESTINATION} | <strong>Rate:</strong>{" "}
-          ${RATE_PER_MILE.toFixed(2)}/mile
+        <div className="pickup-calc-destination" style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <span><strong>Destination:</strong> {DESTINATION}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <strong>Rate:</strong> $
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={ratePerMile}
+              onChange={(e) => setRatePerMile(parseFloat(e.target.value) || 0)}
+              style={{
+                width: 64,
+                background: "var(--bg)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                color: "var(--accent)",
+                fontWeight: 700,
+                padding: "4px 8px",
+                fontSize: 13,
+                fontFamily: "var(--font-head)",
+                textAlign: "center",
+              }}
+            />/mile
+          </span>
         </div>
 
         <div className="field">
