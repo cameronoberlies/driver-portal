@@ -13,7 +13,7 @@ export default function PickupCalculator({ supabase }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
-  const [currentSearchQuery, setCurrentSearchQuery] = useState("");
+  const currentSearchQuery = useRef("");
   const [fromCache, setFromCache] = useState(false);
 
   const debounceTimer = useRef(null);
@@ -27,7 +27,7 @@ export default function PickupCalculator({ supabase }) {
     const query = location.trim();
     if (query.length === 0) {
       setSuggestions([]);
-      setCurrentSearchQuery("");
+      currentSearchQuery.current = "";
       return;
     }
     debounceTimer.current = setTimeout(() => {
@@ -39,14 +39,14 @@ export default function PickupCalculator({ supabase }) {
   }, [location]);
 
   async function fetchSuggestions(query) {
-    setCurrentSearchQuery(query);
+    currentSearchQuery.current = query;
     try {
       const apiKey = "pk.ad8425665c12e1b7f5d7827258d59077";
       const url = `https://api.locationiq.com/v1/autocomplete?key=${apiKey}&q=${encodeURIComponent(query)}&countrycodes=us&limit=6&dedupe=1`;
       const response = await fetch(url);
       if (!response.ok) return;
       const data = await response.json();
-      if (query !== currentSearchQuery) return;
+      if (query !== currentSearchQuery.current) return;
       const rankedResults = rankResults(data, query);
       setSuggestions(rankedResults);
     } catch (err) {

@@ -2868,7 +2868,42 @@ function AdminDashboard({
 }) {
   const isAdmin = user.role === "admin";
   const drivers = allProfiles.filter((u) => u.role === "driver");
-  const [tab, setTab] = useState(prefillData ? "trips" : "overview");
+
+  // URL ↔ tab sync
+  const TAB_PATHS = {
+    "overview": "/", "trips": "/trips", "log entry": "/logentry",
+    "all entries": "/allentries", "mileage costs": "/mileagecosts",
+    "availability": "/availability", "capacity": "/capacity",
+    "live drivers": "/livedrivers", "manage users": "/manageusers",
+    "pickup calculator": "/pickupcalculator", "downloads": "/downloads",
+    "my trips": "/mytrips", "weekly report": "/weeklyreport",
+    "monthly report": "/monthlyreport",
+  };
+  const PATH_TO_TAB = Object.fromEntries(
+    Object.entries(TAB_PATHS).map(([k, v]) => [v, k])
+  );
+
+  function getInitialTab() {
+    if (prefillData) return "trips";
+    const path = window.location.pathname.toLowerCase();
+    return PATH_TO_TAB[path] || "overview";
+  }
+
+  const [tab, setTabRaw] = useState(getInitialTab);
+  function setTab(t) {
+    setTabRaw(t);
+    const path = TAB_PATHS[t] || "/";
+    window.history.pushState(null, "", path);
+  }
+
+  useEffect(() => {
+    function onPopState() {
+      const path = window.location.pathname.toLowerCase();
+      setTabRaw(PATH_TO_TAB[path] || "overview");
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [driverTab, setDriverTab] = useState("overview");
   const [editingEntry, setEditingEntry] = useState(null);
