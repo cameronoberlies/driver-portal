@@ -3464,7 +3464,7 @@ function AdminDashboard({
       {tab === "availability" && <AdminAvailability drivers={drivers} />}
       {tab === "capacity" && <CapacityCalendar isAdmin={isAdmin} />}
       {tab === "live drivers" && <LiveDriversMap drivers={drivers} />}
-      {tab === "pickup calculator" && <PickupCalculator />}
+      {tab === "pickup calculator" && <PickupCalculator supabase={supabase} />}
       {tab === "downloads" && (
         <div style={{ maxWidth: 480 }}>
           <div
