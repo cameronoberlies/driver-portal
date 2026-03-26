@@ -32,7 +32,7 @@ export default function PickupCalculator({ supabase }) {
     }
     debounceTimer.current = setTimeout(() => {
       fetchSuggestions(query);
-    }, 150);
+    }, 300);
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
@@ -100,7 +100,7 @@ export default function PickupCalculator({ supabase }) {
         .from('location_cache')
         .select('distance, cost')
         .ilike('location', loc.trim())
-        .single();
+        .maybeSingle();
 
       if (!error && data) {
         // Store in memory cache too
