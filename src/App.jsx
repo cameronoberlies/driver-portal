@@ -2411,6 +2411,282 @@ function LiveDriversMap({ drivers }) {
   );
 }
 
+// ─── DRIVER DETAIL VIEW (with edit) ───────────────────────────────────────────
+function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [editError, setEditError] = useState("");
+  const [editSuccess, setEditSuccess] = useState("");
+  const [licenseFile, setLicenseFile] = useState(null);
+  const [editForm, setEditForm] = useState({
+    name: driver.name || "",
+    role: driver.role || "driver",
+    phone_number: driver.phone_number || "",
+    date_of_birth: driver.date_of_birth || "",
+    willing_to_fly: driver.willing_to_fly || false,
+    can_drive_manual: driver.can_drive_manual || false,
+    drivers_license_number: driver.drivers_license_number || "",
+  });
+
+  function startEdit() {
+    setEditForm({
+      name: driver.name || "",
+      role: driver.role || "driver",
+      phone_number: driver.phone_number || "",
+      date_of_birth: driver.date_of_birth || "",
+      willing_to_fly: driver.willing_to_fly || false,
+      can_drive_manual: driver.can_drive_manual || false,
+      drivers_license_number: driver.drivers_license_number || "",
+    });
+    setLicenseFile(null);
+    setEditError("");
+    setEditSuccess("");
+    setEditing(true);
+  }
+
+  async function handleSave() {
+    if (!editForm.name.trim()) {
+      setEditError("Name is required.");
+      return;
+    }
+    setSaving(true);
+    setEditError("");
+
+    let licensePhotoUrl = driver.drivers_license_photo_url || null;
+
+    // Upload new license photo if provided
+    if (licenseFile) {
+      setUploadProgress(10);
+      const fileExt = licenseFile.name.split('.').pop();
+      const fileName = `${driver.id}/license.${fileExt}`;
+      setUploadProgress(30);
+      const { error: uploadError } = await supabase.storage
+        .from('driver-licenses')
+        .upload(fileName, licenseFile, { cacheControl: '3600', upsert: true });
+      if (uploadError) {
+        setEditError(`License upload failed: ${uploadError.message}`);
+        setSaving(false);
+        setUploadProgress(0);
+        return;
+      }
+      setUploadProgress(70);
+      const { data: { publicUrl } } = supabase.storage
+        .from('driver-licenses')
+        .getPublicUrl(fileName);
+      licensePhotoUrl = publicUrl;
+      setUploadProgress(100);
+    }
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({
+        name: editForm.name.trim(),
+        role: editForm.role,
+        phone_number: editForm.phone_number || null,
+        date_of_birth: editForm.date_of_birth || null,
+        willing_to_fly: editForm.willing_to_fly,
+        can_drive_manual: editForm.can_drive_manual,
+        drivers_license_number: editForm.drivers_license_number || null,
+        drivers_license_photo_url: licensePhotoUrl,
+      })
+      .eq("id", driver.id);
+
+    if (updateError) {
+      setEditError(updateError.message);
+      setSaving(false);
+      return;
+    }
+
+    const updated = {
+      ...driver,
+      name: editForm.name.trim(),
+      role: editForm.role,
+      phone_number: editForm.phone_number || null,
+      date_of_birth: editForm.date_of_birth || null,
+      willing_to_fly: editForm.willing_to_fly,
+      can_drive_manual: editForm.can_drive_manual,
+      drivers_license_number: editForm.drivers_license_number || null,
+      drivers_license_photo_url: licensePhotoUrl,
+    };
+
+    onProfileUpdated(updated);
+    setSaving(false);
+    setEditing(false);
+    setEditSuccess("Profile updated successfully.");
+    setTimeout(() => setEditSuccess(""), 3000);
+  }
+
+  if (editing) {
+    return (
+      <div>
+        <div style={{ marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
+          <button onClick={() => setEditing(false)} className="btn-secondary">← Cancel</button>
+          <h2 style={{ margin: 0 }}>Edit — {driver.name}</h2>
+        </div>
+
+        {editError && <div className="error-banner">{editError}</div>}
+
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Name <span style={{ color: "var(--danger)" }}>*</span></label>
+            <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label>Role</label>
+            <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}>
+              <option value="driver">Driver</option>
+              <option value="admin">Admin</option>
+              <option value="caller">Caller</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Phone Number</label>
+            <input type="tel" value={editForm.phone_number} onChange={(e) => setEditForm({ ...editForm, phone_number: e.target.value })} placeholder="(555) 123-4567" />
+          </div>
+          <div className="form-group">
+            <label>Date of Birth</label>
+            <input type="date" value={editForm.date_of_birth} onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label>Driver's License Number</label>
+            <input type="text" value={editForm.drivers_license_number} onChange={(e) => setEditForm({ ...editForm, drivers_license_number: e.target.value })} placeholder="DL123456" />
+          </div>
+          <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={editForm.willing_to_fly} onChange={(e) => setEditForm({ ...editForm, willing_to_fly: e.target.checked })} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} />
+              Willing to fly
+            </label>
+          </div>
+          <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input type="checkbox" checked={editForm.can_drive_manual} onChange={(e) => setEditForm({ ...editForm, can_drive_manual: e.target.checked })} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} />
+              Can drive manual transmission
+            </label>
+          </div>
+          <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+            <label>Update License Photo</label>
+            <input type="file" accept="image/*" onChange={(e) => setLicenseFile(e.target.files[0])} />
+            {licenseFile && <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>Selected: {licenseFile.name}</div>}
+            {uploadProgress > 0 && uploadProgress < 100 && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>Uploading photo...</span>
+                  <span style={{ fontSize: 11, color: "var(--accent)", fontWeight: 700 }}>{uploadProgress}%</span>
+                </div>
+                <div className="progress-bar">
+                  <div className="progress-fill trips" style={{ width: `${uploadProgress}%` }} />
+                </div>
+              </div>
+            )}
+            {uploadProgress === 100 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: "var(--success)", fontWeight: 600 }}>✓ Photo uploaded</div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? (uploadProgress > 0 && uploadProgress < 100 ? "Uploading..." : "Saving...") : "Save Changes →"}
+          </button>
+          <button className="btn btn-ghost" onClick={() => setEditing(false)}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
+        <button onClick={onBack} className="btn-secondary">← Back</button>
+        <h2 style={{ margin: 0 }}>{driver.name}</h2>
+        <button onClick={startEdit} className="btn-edit" style={{ marginLeft: "auto" }}>Edit Profile</button>
+      </div>
+
+      {editSuccess && <div className="success-banner">{editSuccess}</div>}
+
+      <div className="driver-detail-grid">
+        <div className="detail-section">
+          <h3>Basic Information</h3>
+          <div className="detail-row">
+            <span className="detail-label">Name:</span>
+            <span className="detail-value">{driver.name}</span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-label">Role:</span>
+            <span className="detail-value" style={{
+              textTransform: "capitalize",
+              color: driver.role === "admin" ? "var(--accent)" : "inherit",
+            }}>
+              {driver.role}
+            </span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-label">Phone:</span>
+            <span className="detail-value">{driver.phone_number || "—"}</span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-label">Date of Birth:</span>
+            <span className="detail-value">
+              {driver.date_of_birth
+                ? new Date(driver.date_of_birth).toLocaleDateString("en-US", {
+                    year: "numeric", month: "long", day: "numeric",
+                  })
+                : "—"}
+            </span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-label">Willing to Fly:</span>
+            <span className="detail-value">
+              {driver.willing_to_fly ? "✓ Yes" : "✗ No"}
+            </span>
+          </div>
+        </div>
+
+        <div className="detail-section">
+          <h3>License &amp; Driving</h3>
+          <div className="detail-row">
+            <span className="detail-label">Can Drive Manual:</span>
+            <span className="detail-value" style={{
+              color: driver.can_drive_manual ? "var(--success)" : "var(--muted)",
+            }}>
+              {driver.can_drive_manual ? "✓ Yes (Stick Shift)" : "✗ Automatic Only"}
+            </span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-label">License Number:</span>
+            <span className="detail-value">{driver.drivers_license_number || "—"}</span>
+          </div>
+          {driver.drivers_license_photo_url && (
+            <div className="detail-row" style={{ flexDirection: "column", alignItems: "flex-start" }}>
+              <span className="detail-label">License Photo:</span>
+              <img
+                src={driver.drivers_license_photo_url}
+                alt="Driver's License"
+                style={{
+                  maxWidth: "100%", maxHeight: 300,
+                  marginTop: 12,
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={onDelete}
+        disabled={deleting}
+        className="btn-danger"
+        style={{ marginTop: 24 }}
+      >
+        {deleting ? "Deleting..." : "Delete User"}
+      </button>
+    </div>
+  );
+}
+
 function ManageUsers({ allProfiles, setAllProfiles }) {
   const [view, setView] = useState("list"); // list | add | view
   const [selectedDriver, setSelectedDriver] = useState(null);
@@ -2598,7 +2874,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
 
         <div className="form-grid">
           <div className="form-group">
-            <label>Name *</label>
+            <label>Name <span style={{ color: "var(--danger)" }}>*</span></label>
             <input
               type="text"
               value={form.name}
@@ -2607,7 +2883,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
             />
           </div>
           <div className="form-group">
-            <label>Email *</label>
+            <label>Email <span style={{ color: "var(--danger)" }}>*</span></label>
             <input
               type="email"
               value={form.email}
@@ -2616,7 +2892,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
             />
           </div>
           <div className="form-group">
-            <label>Password *</label>
+            <label>Password <span style={{ color: "var(--danger)" }}>*</span></label>
             <input
               type="password"
               value={form.password}
@@ -2625,7 +2901,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
             />
           </div>
           <div className="form-group">
-            <label>Role *</label>
+            <label>Role <span style={{ color: "var(--danger)" }}>*</span></label>
             <select
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value })}
@@ -2700,93 +2976,17 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
 
   if (view === "view" && selectedDriver) {
     return (
-      <div>
-        <div style={{ marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
-          <button onClick={() => { setView("list"); setSelectedDriver(null); }} className="btn-secondary">
-            ← Back
-          </button>
-          <h2 style={{ margin: 0 }}>{selectedDriver.name}</h2>
-        </div>
-
-        <div className="driver-detail-grid">
-          <div className="detail-section">
-            <h3>Basic Information</h3>
-            <div className="detail-row">
-              <span className="detail-label">Name:</span>
-              <span className="detail-value">{selectedDriver.name}</span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">Role:</span>
-              <span className="detail-value" style={{
-                textTransform: "capitalize",
-                color: selectedDriver.role === "admin" ? "var(--accent)" : "inherit",
-              }}>
-                {selectedDriver.role}
-              </span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">Phone:</span>
-              <span className="detail-value">{selectedDriver.phone_number || "—"}</span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">Date of Birth:</span>
-              <span className="detail-value">
-                {selectedDriver.date_of_birth
-                  ? new Date(selectedDriver.date_of_birth).toLocaleDateString("en-US", {
-                      year: "numeric", month: "long", day: "numeric",
-                    })
-                  : "—"}
-              </span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">Willing to Fly:</span>
-              <span className="detail-value">
-                {selectedDriver.willing_to_fly ? "✓ Yes" : "✗ No"}
-              </span>
-            </div>
-          </div>
-
-          <div className="detail-section">
-            <h3>License &amp; Driving</h3>
-            <div className="detail-row">
-              <span className="detail-label">Can Drive Manual:</span>
-              <span className="detail-value" style={{
-                color: selectedDriver.can_drive_manual ? "var(--success)" : "var(--muted)",
-              }}>
-                {selectedDriver.can_drive_manual ? "✓ Yes (Stick Shift)" : "✗ Automatic Only"}
-              </span>
-            </div>
-            <div className="detail-row">
-              <span className="detail-label">License Number:</span>
-              <span className="detail-value">{selectedDriver.drivers_license_number || "—"}</span>
-            </div>
-            {selectedDriver.drivers_license_photo_url && (
-              <div className="detail-row" style={{ flexDirection: "column", alignItems: "flex-start" }}>
-                <span className="detail-label">License Photo:</span>
-                <img
-                  src={selectedDriver.drivers_license_photo_url}
-                  alt="Driver's License"
-                  style={{
-                    maxWidth: "100%", maxHeight: 300,
-                    marginTop: 12,
-                    border: "1px solid var(--border)",
-                    borderRadius: 4,
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        <button
-          onClick={() => handleDelete(selectedDriver)}
-          disabled={deleting === selectedDriver.id}
-          className="btn-danger"
-          style={{ marginTop: 24 }}
-        >
-          {deleting === selectedDriver.id ? "Deleting..." : "Delete User"}
-        </button>
-      </div>
+      <DriverDetailView
+        driver={selectedDriver}
+        supabase={supabase}
+        onBack={() => { setView("list"); setSelectedDriver(null); }}
+        onDelete={() => handleDelete(selectedDriver)}
+        deleting={deleting === selectedDriver.id}
+        onProfileUpdated={(updated) => {
+          setSelectedDriver(updated);
+          setAllProfiles((prev) => prev.map((p) => p.id === updated.id ? updated : p));
+        }}
+      />
     );
   }
 
@@ -3151,7 +3351,7 @@ function AdminDashboard({
             <>
               <div className="form-grid">
                 <div className="field">
-                  <label>Driver</label>
+                  <label>Driver <span style={{ color: "var(--danger)" }}>*</span></label>
                   <select
                     value={form.driver_id}
                     onChange={(e) =>
@@ -3166,7 +3366,7 @@ function AdminDashboard({
                   </select>
                 </div>
                 <div className="field">
-                  <label>Date</label>
+                  <label>Date <span style={{ color: "var(--danger)" }}>*</span></label>
                   <input
                     type="date"
                     value={form.date}
@@ -3176,7 +3376,7 @@ function AdminDashboard({
                   />
                 </div>
                 <div className="field">
-                  <label>Pay Amount ($)</label>
+                  <label>Pay Amount ($) <span style={{ color: "var(--danger)" }}>*</span></label>
                   <input
                     type="number"
                     placeholder="0.00"
