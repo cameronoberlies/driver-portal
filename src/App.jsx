@@ -474,6 +474,18 @@ function Login({ onLogin }) {
           </button>
           {error && <div className="error-msg">{error}</div>}
         </form>
+        <div style={{ display: "flex", justifyContent: "center", gap: 12, marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--border)" }}>
+          <a href="https://apps.apple.com/us/app/discovery-driver-portal/id6760372806" target="_blank" rel="noreferrer">
+            <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" style={{ height: 40 }} />
+          </a>
+          <a href="/driverportal.apk" download style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#000", border: "1px solid #333", borderRadius: 6, padding: "6px 12px", textDecoration: "none", color: "#fff", fontSize: 12, height: 40 }}>
+            <span style={{ fontSize: 18 }}>🤖</span>
+            <div style={{ lineHeight: 1.2 }}>
+              <div style={{ fontSize: 8, letterSpacing: 0.5 }}>Download</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Android APK</div>
+            </div>
+          </a>
+        </div>
       </div>
     </div>
   );
@@ -1272,7 +1284,7 @@ function DriverDashboard({ driver, entries, trips, setTrips, tab, setTab }) {
             App Downloads
           </div>
           <a
-            href="https://testflight.apple.com/join/JdBj3A7X"
+            href="https://apps.apple.com/us/app/discovery-driver-portal/id6760372806"
             target="_blank"
             rel="noreferrer"
             style={{
@@ -1282,28 +1294,14 @@ function DriverDashboard({ driver, entries, trips, setTrips, tab, setTab }) {
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderLeft: "3px solid #3b8cf7",
-              padding: "20px 24px",
+              padding: "16px 24px",
               marginBottom: 12,
               textDecoration: "none",
               color: "var(--text)",
+              borderRadius: "var(--radius-sm)",
             }}
           >
-            <span style={{ fontSize: 28 }}>🍎</span>
-            <div>
-              <div
-                style={{
-                  fontFamily: "var(--font-head)",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                }}
-              >
-                iOS App
-              </div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-                Install via TestFlight
-              </div>
-            </div>
+            <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" style={{ height: 40 }} />
           </a>
           <a
             href="/driverportal.apk"
@@ -1319,6 +1317,7 @@ function DriverDashboard({ driver, entries, trips, setTrips, tab, setTab }) {
               marginBottom: 12,
               textDecoration: "none",
               color: "var(--text)",
+              borderRadius: "var(--radius-sm)",
             }}
           >
             <span style={{ fontSize: 28 }}>🤖</span>
@@ -3515,7 +3514,7 @@ function AdminDashboard({
             App Downloads
           </div>
           <a
-            href="https://testflight.apple.com/join/JdBj3A7X"
+            href="https://apps.apple.com/us/app/discovery-driver-portal/id6760372806"
             target="_blank"
             rel="noreferrer"
             style={{
@@ -3525,30 +3524,14 @@ function AdminDashboard({
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderLeft: "3px solid #3b8cf7",
-              padding: "20px 24px",
+              padding: "16px 24px",
               marginBottom: 12,
               textDecoration: "none",
               color: "var(--text)",
+              borderRadius: "var(--radius-sm)",
             }}
           >
-            <span style={{ fontSize: 28 }}>🍎</span>
-            <div>
-              <div
-                style={{
-                  fontFamily: "var(--font-head)",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                }}
-              >
-                iOS App
-              </div>
-              <div
-                style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}
-              >
-                Install via TestFlight
-              </div>
-            </div>
+            <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" style={{ height: 40 }} />
           </a>
           <a
             href="/driverportal.apk"
@@ -3564,6 +3547,7 @@ function AdminDashboard({
               marginBottom: 12,
               textDecoration: "none",
               color: "var(--text)",
+              borderRadius: "var(--radius-sm)",
             }}
           >
             <span style={{ fontSize: 28 }}>🤖</span>
