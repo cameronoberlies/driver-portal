@@ -18,12 +18,17 @@ export default function PickupCalculator({ supabase }) {
 
   const debounceTimer = useRef(null);
   const suggestionsRef = useRef(null);
+  const justSelected = useRef(false);
 
   // In-memory cache for the session (avoids repeat Supabase calls too)
   const memoryCache = useRef({});
 
   useEffect(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    if (justSelected.current) {
+      justSelected.current = false;
+      return;
+    }
     const query = location.trim();
     if (query.length === 0) {
       setSuggestions([]);
@@ -74,6 +79,7 @@ export default function PickupCalculator({ supabase }) {
   }
 
   function selectSuggestion(suggestion) {
+    justSelected.current = true;
     setLocation(suggestion.display_name);
     setSelectedCoords({
       lat: parseFloat(suggestion.lat),
