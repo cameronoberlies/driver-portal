@@ -2421,6 +2421,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
   const [licenseFile, setLicenseFile] = useState(null);
   const [editForm, setEditForm] = useState({
     name: driver.name || "",
+    email: driver.email || "",
     role: driver.role || "driver",
     phone_number: driver.phone_number || "",
     date_of_birth: driver.date_of_birth || "",
@@ -2432,6 +2433,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
   function startEdit() {
     setEditForm({
       name: driver.name || "",
+      email: driver.email || "",
       role: driver.role || "driver",
       phone_number: driver.phone_number || "",
       date_of_birth: driver.date_of_birth || "",
@@ -2478,10 +2480,39 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
       setUploadProgress(100);
     }
 
+    // Update email via edge function if it changed
+    if (editForm.email && editForm.email !== driver.email) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setEditError("Session expired. Please log in again.");
+        setSaving(false);
+        return;
+      }
+      const emailRes = await fetch(
+        `https://yincjogkjvotupzgetqg.supabase.co/functions/v1/manage-users`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ action: "update-email", userId: driver.id, email: editForm.email }),
+        }
+      );
+      if (!emailRes.ok) {
+        const errData = await emailRes.json();
+        setEditError(errData.error || "Failed to update email");
+        setSaving(false);
+        return;
+      }
+    }
+
     const { error: updateError } = await supabase
       .from("profiles")
       .update({
         name: editForm.name.trim(),
+        email: editForm.email || null,
         role: editForm.role,
         phone_number: editForm.phone_number || null,
         date_of_birth: editForm.date_of_birth || null,
@@ -2501,6 +2532,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
     const updated = {
       ...driver,
       name: editForm.name.trim(),
+      email: editForm.email || null,
       role: editForm.role,
       phone_number: editForm.phone_number || null,
       date_of_birth: editForm.date_of_birth || null,
@@ -2531,6 +2563,10 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
           <div className="form-group">
             <label>Name <span style={{ color: "var(--danger)" }}>*</span></label>
             <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label>Email</label>
+            <input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="user@example.com" />
           </div>
           <div className="form-group">
             <label>Role</label>
@@ -2611,6 +2647,10 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
           <div className="detail-row">
             <span className="detail-label">Name:</span>
             <span className="detail-value">{driver.name}</span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-label">Email:</span>
+            <span className="detail-value">{driver.email || "—"}</span>
           </div>
           <div className="detail-row">
             <span className="detail-label">Role:</span>
@@ -3007,6 +3047,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Email</th>
               <th>Role</th>
               <th>Phone</th>
               <th>Manual Trans</th>
@@ -3018,6 +3059,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
             {allProfiles.map((user) => (
               <tr key={user.id}>
                 <td style={{ fontWeight: 600 }}>{user.name}</td>
+                <td style={{ color: "var(--muted)", fontSize: 13 }}>{user.email || "—"}</td>
                 <td style={{ textTransform: "capitalize" }}>
                   {user.role === "admin" && <span style={{ color: "var(--accent)" }}>★ </span>}
                   {user.role}
