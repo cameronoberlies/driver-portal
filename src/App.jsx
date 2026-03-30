@@ -2892,6 +2892,8 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
     const { data: profiles } = await supabase.from("profiles").select("*");
     if (profiles) setAllProfiles(profiles);
     setDeleting(null);
+    setSelectedDriver(null);
+    setView("list");
   }
 
   function viewDriver(driver) {

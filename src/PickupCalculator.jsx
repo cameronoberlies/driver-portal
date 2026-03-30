@@ -143,7 +143,8 @@ export default function PickupCalculator({ supabase }) {
   }
 
   async function getDrivingDistance(origin) {
-    const url = `https://router.project-osrm.org/route/v1/driving/${origin.lon},${origin.lat};${DEST_LON},${DEST_LAT}?overview=false`;
+    const apiKey = "pk.ad8425665c12e1b7f5d7827258d59077";
+    const url = `https://us1.locationiq.com/v1/directions/driving/${origin.lon},${origin.lat};${DEST_LON},${DEST_LAT}?key=${apiKey}&overview=false`;
     const response = await fetch(url);
     if (!response.ok) throw new Error("Failed to calculate route. Please try again.");
     const data = await response.json();
