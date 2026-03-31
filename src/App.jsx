@@ -192,8 +192,8 @@ const css = `
   .table-head { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
   .table-head-title { font-family: var(--font-head); font-size: 15px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
   table { width: 100%; border-collapse: collapse; }
-  th { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); padding: 13px 24px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; background: rgba(255,255,255,0.015); }
-  td { padding: 14px 24px; font-size: 13.5px; border-bottom: 1px solid rgba(35,42,54,0.6); white-space: nowrap; transition: background 0.15s; }
+  th { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); padding: 13px 16px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; background: rgba(255,255,255,0.015); }
+  td { padding: 14px 16px; font-size: 13.5px; border-bottom: 1px solid rgba(35,42,54,0.6); transition: background 0.15s; }
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: rgba(255,255,255,0.025); }
   tbody tr:nth-child(even) td { background: rgba(255,255,255,0.01); }
