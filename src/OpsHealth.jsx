@@ -47,7 +47,7 @@ export default function OpsHealth() {
   const [filterAuditAction, setFilterAuditAction] = useState("all");
   const [timeRange, setTimeRange] = useState("24h");
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [activeTab, setActiveTab] = useState("events");
+  const [activeTab, setActiveTab] = useState("activity");
 
   const OPS_PASS = "Zaxscd0909";
 
@@ -157,6 +157,193 @@ export default function OpsHealth() {
       return `${profileMap[val]}`;
     }
     return JSON.stringify(val);
+  }
+
+  function name(id) {
+    return profileMap[id] || "Unknown";
+  }
+
+  function describeAudit(log) {
+    const actor = log.changed_by ? name(log.changed_by) : "System";
+    const n = log.new_data || {};
+    const o = log.old_data || {};
+
+    // ── TRIPS ──
+    if (log.table_name === "trips") {
+      const city = n.city || o.city || "unknown city";
+      const driver = n.designated_driver_id ? name(n.designated_driver_id) : null;
+      const tripType = (n.trip_type || o.trip_type) === "fly" ? "fly" : "drive";
+      const typeIcon = tripType === "fly" ? "✈" : "🚗";
+
+      if (log.action === "INSERT") {
+        return {
+          icon: "➕",
+          text: `${actor} created a ${typeIcon} ${tripType} trip to ${city}${driver ? ` for ${driver}` : ""}`,
+          color: "#34c759",
+        };
+      }
+
+      if (log.action === "DELETE") {
+        return {
+          icon: "🗑",
+          text: `${actor} deleted ${typeIcon} trip to ${city}`,
+          color: "#ff453a",
+        };
+      }
+
+      if (log.action === "UPDATE") {
+        // Status changes
+        if (o.status !== n.status) {
+          if (n.status === "in_progress") {
+            return {
+              icon: "▶",
+              text: `${actor} started ${typeIcon} trip to ${city}`,
+              color: "#0a84ff",
+            };
+          }
+          if (n.status === "completed") {
+            const miles = n.miles ? `${n.miles} mi` : "";
+            const hours = n.hours ? `${n.hours}h` : "";
+            const detail = [miles, hours].filter(Boolean).join(", ");
+            return {
+              icon: "✓",
+              text: `${actor} completed ${typeIcon} trip to ${city}${detail ? ` — ${detail}` : ""}`,
+              color: "#34c759",
+            };
+          }
+          if (n.status === "finalized") {
+            return {
+              icon: "✓✓",
+              text: `${actor} finalized ${typeIcon} trip to ${city}`,
+              color: "#f5a623",
+            };
+          }
+        }
+
+        // Driver reassignment
+        if (o.designated_driver_id !== n.designated_driver_id && n.designated_driver_id) {
+          const from = o.designated_driver_id ? name(o.designated_driver_id) : "unassigned";
+          const to = name(n.designated_driver_id);
+          return {
+            icon: "🔄",
+            text: `${actor} reassigned ${city} trip from ${from} to ${to}`,
+            color: "#f5a623",
+          };
+        }
+
+        // Generic trip update
+        const changedFields = Object.keys(n).filter(k => JSON.stringify(n[k]) !== JSON.stringify(o[k]));
+        const meaningful = changedFields.filter(k => !["updated_at", "created_at"].includes(k));
+        return {
+          icon: "✎",
+          text: `${actor} updated ${city} trip — ${meaningful.join(", ")}`,
+          color: "#999",
+        };
+      }
+    }
+
+    // ── ENTRIES ──
+    if (log.table_name === "entries") {
+      const city = n.city || o.city || "unknown city";
+      const driverName = n.driver_id ? name(n.driver_id) : "unknown driver";
+      const pay = n.pay ? `$${Number(n.pay).toFixed(2)}` : "";
+
+      if (log.action === "INSERT") {
+        return {
+          icon: "📝",
+          text: `${actor} logged entry for ${driverName} — ${city}${pay ? `, ${pay}` : ""}`,
+          color: "#34c759",
+        };
+      }
+      if (log.action === "UPDATE") {
+        const changedFields = Object.keys(n).filter(k => JSON.stringify(n[k]) !== JSON.stringify(o[k]));
+        const meaningful = changedFields.filter(k => !["updated_at", "created_at"].includes(k));
+        return {
+          icon: "✎",
+          text: `${actor} edited entry for ${driverName} — ${city} (${meaningful.join(", ")})`,
+          color: "#f5a623",
+        };
+      }
+      if (log.action === "DELETE") {
+        return {
+          icon: "🗑",
+          text: `${actor} deleted entry for ${driverName} — ${city}`,
+          color: "#ff453a",
+        };
+      }
+    }
+
+    // ── PROFILES ──
+    if (log.table_name === "profiles") {
+      const target = n.name || o.name || "unknown user";
+
+      if (log.action === "INSERT") {
+        const role = n.role || "driver";
+        return {
+          icon: "👤",
+          text: `${actor} created ${role} account for ${target}`,
+          color: "#34c759",
+        };
+      }
+
+      if (log.action === "UPDATE") {
+        const changedFields = Object.keys(n).filter(k =>
+          JSON.stringify(n[k]) !== JSON.stringify(o[k])
+        ).filter(k => !["updated_at", "created_at", "push_token"].includes(k));
+
+        if (changedFields.length === 0) {
+          return {
+            icon: "📱",
+            text: `${target} synced push token`,
+            color: "#444",
+          };
+        }
+        if (changedFields.includes("role")) {
+          return {
+            icon: "🔑",
+            text: `${actor} changed ${target}'s role from ${o.role} to ${n.role}`,
+            color: "#f5a623",
+          };
+        }
+        if (changedFields.includes("willing_to_fly")) {
+          const status = n.willing_to_fly ? "willing to fly" : "not willing to fly";
+          return {
+            icon: "✈",
+            text: `${actor} marked ${target} as ${status}`,
+            color: "#0a84ff",
+          };
+        }
+        if (changedFields.includes("can_drive_manual")) {
+          const status = n.can_drive_manual ? "can drive manual" : "cannot drive manual";
+          return {
+            icon: "🚗",
+            text: `${actor} marked ${target} as ${status}`,
+            color: "#0a84ff",
+          };
+        }
+
+        return {
+          icon: "✎",
+          text: `${actor} updated ${target}'s profile — ${changedFields.join(", ")}`,
+          color: "#999",
+        };
+      }
+
+      if (log.action === "DELETE") {
+        return {
+          icon: "🗑",
+          text: `${actor} deleted ${target}'s account`,
+          color: "#ff453a",
+        };
+      }
+    }
+
+    // ── FALLBACK ──
+    return {
+      icon: "•",
+      text: `${actor} ${log.action.toLowerCase()}d ${log.table_name} #${log.record_id.slice(0, 8)}`,
+      color: "#666",
+    };
   }
 
   if (!authed) {
@@ -306,6 +493,12 @@ export default function OpsHealth() {
       {/* Tab Switcher */}
       <div style={styles.tabRow}>
         <button
+          style={activeTab === "activity" ? styles.tabActive : styles.tab}
+          onClick={() => setActiveTab("activity")}
+        >
+          ACTIVITY FEED
+        </button>
+        <button
           style={activeTab === "events" ? styles.tabActive : styles.tab}
           onClick={() => setActiveTab("events")}
         >
@@ -318,6 +511,35 @@ export default function OpsHealth() {
           AUDIT LOG
         </button>
       </div>
+
+      {/* Activity Feed */}
+      {activeTab === "activity" && (
+        <div style={styles.logSection}>
+          <div style={styles.logHeader}>
+            <span style={styles.logTitle}>ACTIVITY FEED</span>
+            <span style={styles.logCount}>{auditLogs.length} actions</span>
+          </div>
+          <div style={styles.logList}>
+            {auditLogs.length === 0 && (
+              <div style={styles.logEmpty}>No activity in this time range.</div>
+            )}
+            {auditLogs.map((log) => {
+              const desc = describeAudit(log);
+              return (
+                <div key={log.id} style={styles.activityRow}>
+                  <span style={styles.activityIcon}>{desc.icon}</span>
+                  <div style={styles.activityContent}>
+                    <span style={{ ...styles.activityText, color: desc.color }}>{desc.text}</span>
+                    <span style={styles.activityTime}>
+                      <TimeAgo date={log.created_at} />
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Event Log */}
       {activeTab === "events" && (
@@ -689,6 +911,38 @@ const styles = {
     fontWeight: 700,
     letterSpacing: 2,
     cursor: "pointer",
+  },
+
+  // Activity feed
+  activityRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 14,
+    padding: "14px 20px",
+    borderBottom: "1px solid #1a1a1a",
+  },
+  activityIcon: {
+    fontSize: 16,
+    marginTop: 2,
+    flexShrink: 0,
+  },
+  activityContent: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    flex: 1,
+    gap: 16,
+  },
+  activityText: {
+    fontSize: 13,
+    fontWeight: 500,
+    lineHeight: "20px",
+  },
+  activityTime: {
+    fontSize: 11,
+    color: "#444",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
   },
 
   // Log stream
