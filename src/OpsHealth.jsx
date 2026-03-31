@@ -37,6 +37,7 @@ export default function OpsHealth() {
   const [passphrase, setPassphrase] = useState("");
   const [logs, setLogs] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [profileMap, setProfileMap] = useState({});
   const [stats, setStats] = useState(null);
   const [flightStatus, setFlightStatus] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -98,6 +99,14 @@ export default function OpsHealth() {
         setStats({ total: allLogs.length, errors: errorCount, warnings: warnCount, bySource });
       }
 
+      // Fetch profiles for name resolution
+      const { data: profiles } = await supabase.from("profiles").select("id, name, role");
+      if (profiles) {
+        const map = {};
+        profiles.forEach((p) => { map[p.id] = p.name; });
+        setProfileMap(map);
+      }
+
       // Fetch audit logs
       let auditQuery = supabase
         .from("audit_log")
@@ -140,6 +149,15 @@ export default function OpsHealth() {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [authed, autoRefresh, fetchData]);
+
+  const UUID_FIELDS = ["driver_id", "designated_driver_id", "second_driver_id", "changed_by", "id"];
+
+  function displayValue(key, val) {
+    if (val && UUID_FIELDS.includes(key) && profileMap[val]) {
+      return `${profileMap[val]}`;
+    }
+    return JSON.stringify(val);
+  }
 
   if (!authed) {
     return (
@@ -390,6 +408,11 @@ export default function OpsHealth() {
                       {log.table_name}
                     </span>
                     <span style={styles.logEvent}>#{log.record_id}</span>
+                    {log.changed_by && (
+                      <span style={{ ...styles.logSource, color: "#999" }}>
+                        by {profileMap[log.changed_by] || log.changed_by.slice(0, 8)}
+                      </span>
+                    )}
                     <span style={styles.logTime}>
                       <TimeAgo date={log.created_at} />
                     </span>
@@ -402,11 +425,11 @@ export default function OpsHealth() {
                         <div key={k} style={{ marginBottom: 2 }}>
                           <span style={{ color: "#666" }}>{k}: </span>
                           <span style={{ color: "#ff453a", textDecoration: "line-through" }}>
-                            {JSON.stringify(log.old_data[k])}
+                            {displayValue(k, log.old_data[k])}
                           </span>
                           <span style={{ color: "#666" }}> → </span>
                           <span style={{ color: "#34c759" }}>
-                            {JSON.stringify(log.new_data[k])}
+                            {displayValue(k, log.new_data[k])}
                           </span>
                         </div>
                       ))}
