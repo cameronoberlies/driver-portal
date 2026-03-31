@@ -36,13 +36,17 @@ export default function OpsHealth() {
   const [authed, setAuthed] = useState(false);
   const [passphrase, setPassphrase] = useState("");
   const [logs, setLogs] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
   const [stats, setStats] = useState(null);
   const [flightStatus, setFlightStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [filterSource, setFilterSource] = useState("all");
   const [filterLevel, setFilterLevel] = useState("all");
+  const [filterAuditTable, setFilterAuditTable] = useState("all");
+  const [filterAuditAction, setFilterAuditAction] = useState("all");
   const [timeRange, setTimeRange] = useState("24h");
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [activeTab, setActiveTab] = useState("events");
 
   const OPS_PASS = "Zaxscd0909";
 
@@ -94,6 +98,20 @@ export default function OpsHealth() {
         setStats({ total: allLogs.length, errors: errorCount, warnings: warnCount, bySource });
       }
 
+      // Fetch audit logs
+      let auditQuery = supabase
+        .from("audit_log")
+        .select("*")
+        .gte("created_at", since)
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      if (filterAuditTable !== "all") auditQuery = auditQuery.eq("table_name", filterAuditTable);
+      if (filterAuditAction !== "all") auditQuery = auditQuery.eq("action", filterAuditAction);
+
+      const { data: auditData } = await auditQuery;
+      setAuditLogs(auditData || []);
+
       // Flight monitor health
       try {
         const res = await fetch(`${FLIGHT_MONITOR_URL}/api/status`, { signal: AbortSignal.timeout(5000) });
@@ -111,7 +129,7 @@ export default function OpsHealth() {
     } finally {
       setLoading(false);
     }
-  }, [filterSource, filterLevel, timeRange]);
+  }, [filterSource, filterLevel, filterAuditTable, filterAuditAction, timeRange]);
 
   useEffect(() => {
     if (authed) fetchData();
@@ -267,43 +285,151 @@ export default function OpsHealth() {
         </div>
       </div>
 
-      {/* Log Stream */}
-      <div style={styles.logSection}>
-        <div style={styles.logHeader}>
-          <span style={styles.logTitle}>EVENT LOG</span>
-          <span style={styles.logCount}>{logs.length} events</span>
-        </div>
-        <div style={styles.logList}>
-          {logs.length === 0 && (
-            <div style={styles.logEmpty}>No events in this time range.</div>
-          )}
-          {logs.map((log) => (
-            <div key={log.id} style={styles.logRow}>
-              <div style={styles.logTop}>
-                <span style={{ ...styles.logLevel, color: LEVEL_COLORS[log.level] || "#666" }}>
-                  {log.level.toUpperCase()}
-                </span>
-                <span
-                  style={{ ...styles.logSource, color: SOURCE_COLORS[log.source] || "#666" }}
-                >
-                  {log.source.replace("_", " ")}
-                </span>
-                <span style={styles.logEvent}>{log.event}</span>
-                <span style={styles.logTime}>
-                  <TimeAgo date={log.created_at} />
-                </span>
-              </div>
-              {log.message && <div style={styles.logMessage}>{log.message}</div>}
-              {log.metadata && Object.keys(log.metadata).length > 0 && (
-                <details style={styles.logMeta}>
-                  <summary style={styles.logMetaSummary}>metadata</summary>
-                  <pre style={styles.logMetaPre}>{JSON.stringify(log.metadata, null, 2)}</pre>
-                </details>
-              )}
-            </div>
-          ))}
-        </div>
+      {/* Tab Switcher */}
+      <div style={styles.tabRow}>
+        <button
+          style={activeTab === "events" ? styles.tabActive : styles.tab}
+          onClick={() => setActiveTab("events")}
+        >
+          EVENT LOG
+        </button>
+        <button
+          style={activeTab === "audit" ? styles.tabActive : styles.tab}
+          onClick={() => setActiveTab("audit")}
+        >
+          AUDIT LOG
+        </button>
       </div>
+
+      {/* Event Log */}
+      {activeTab === "events" && (
+        <div style={styles.logSection}>
+          <div style={styles.logHeader}>
+            <span style={styles.logTitle}>EVENT LOG</span>
+            <span style={styles.logCount}>{logs.length} events</span>
+          </div>
+          <div style={styles.logList}>
+            {logs.length === 0 && (
+              <div style={styles.logEmpty}>No events in this time range.</div>
+            )}
+            {logs.map((log) => (
+              <div key={log.id} style={styles.logRow}>
+                <div style={styles.logTop}>
+                  <span style={{ ...styles.logLevel, color: LEVEL_COLORS[log.level] || "#666" }}>
+                    {log.level.toUpperCase()}
+                  </span>
+                  <span
+                    style={{ ...styles.logSource, color: SOURCE_COLORS[log.source] || "#666" }}
+                  >
+                    {log.source.replace("_", " ")}
+                  </span>
+                  <span style={styles.logEvent}>{log.event}</span>
+                  <span style={styles.logTime}>
+                    <TimeAgo date={log.created_at} />
+                  </span>
+                </div>
+                {log.message && <div style={styles.logMessage}>{log.message}</div>}
+                {log.metadata && Object.keys(log.metadata).length > 0 && (
+                  <details style={styles.logMeta}>
+                    <summary style={styles.logMetaSummary}>metadata</summary>
+                    <pre style={styles.logMetaPre}>{JSON.stringify(log.metadata, null, 2)}</pre>
+                  </details>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Audit Log */}
+      {activeTab === "audit" && (
+        <>
+          <div style={styles.filterBar}>
+            <div style={styles.filterGroup}>
+              {["all", "trips", "profiles", "entries"].map((t) => (
+                <button
+                  key={t}
+                  style={filterAuditTable === t ? styles.filterBtnActive : styles.filterBtn}
+                  onClick={() => setFilterAuditTable(t)}
+                >
+                  {t.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <div style={styles.filterGroup}>
+              {["all", "INSERT", "UPDATE", "DELETE"].map((a) => (
+                <button
+                  key={a}
+                  style={filterAuditAction === a ? styles.filterBtnActive : styles.filterBtn}
+                  onClick={() => setFilterAuditAction(a)}
+                >
+                  {a === "all" ? "ALL" : a}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={styles.logSection}>
+            <div style={styles.logHeader}>
+              <span style={styles.logTitle}>AUDIT LOG</span>
+              <span style={styles.logCount}>{auditLogs.length} changes</span>
+            </div>
+            <div style={styles.logList}>
+              {auditLogs.length === 0 && (
+                <div style={styles.logEmpty}>No audit events in this time range.</div>
+              )}
+              {auditLogs.map((log) => (
+                <div key={log.id} style={styles.logRow}>
+                  <div style={styles.logTop}>
+                    <span style={{
+                      ...styles.logLevel,
+                      color: log.action === "DELETE" ? "#ff453a" : log.action === "INSERT" ? "#34c759" : "#f5a623",
+                    }}>
+                      {log.action}
+                    </span>
+                    <span style={{ ...styles.logSource, color: "#0a84ff" }}>
+                      {log.table_name}
+                    </span>
+                    <span style={styles.logEvent}>#{log.record_id}</span>
+                    <span style={styles.logTime}>
+                      <TimeAgo date={log.created_at} />
+                    </span>
+                  </div>
+                  {log.action === "UPDATE" && log.old_data && log.new_data && (
+                    <div style={styles.logMessage}>
+                      {Object.keys(log.new_data).filter(k =>
+                        JSON.stringify(log.new_data[k]) !== JSON.stringify(log.old_data[k])
+                      ).map(k => (
+                        <div key={k} style={{ marginBottom: 2 }}>
+                          <span style={{ color: "#666" }}>{k}: </span>
+                          <span style={{ color: "#ff453a", textDecoration: "line-through" }}>
+                            {JSON.stringify(log.old_data[k])}
+                          </span>
+                          <span style={{ color: "#666" }}> → </span>
+                          <span style={{ color: "#34c759" }}>
+                            {JSON.stringify(log.new_data[k])}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {log.action === "INSERT" && log.new_data && (
+                    <details style={styles.logMeta}>
+                      <summary style={styles.logMetaSummary}>new record</summary>
+                      <pre style={styles.logMetaPre}>{JSON.stringify(log.new_data, null, 2)}</pre>
+                    </details>
+                  )}
+                  {log.action === "DELETE" && log.old_data && (
+                    <details style={styles.logMeta}>
+                      <summary style={styles.logMetaSummary}>deleted record</summary>
+                      <pre style={styles.logMetaPre}>{JSON.stringify(log.old_data, null, 2)}</pre>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -509,6 +635,36 @@ const styles = {
     fontSize: 10,
     fontWeight: 700,
     letterSpacing: 1,
+    cursor: "pointer",
+  },
+
+  // Tabs
+  tabRow: {
+    display: "flex",
+    gap: 4,
+    marginBottom: 16,
+  },
+  tab: {
+    background: "#111",
+    border: "1px solid #1e1e1e",
+    borderRadius: "6px 6px 0 0",
+    padding: "10px 24px",
+    color: "#666",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 2,
+    cursor: "pointer",
+  },
+  tabActive: {
+    background: "#1a1a1a",
+    border: "1px solid #1e1e1e",
+    borderBottom: "2px solid #f5a623",
+    borderRadius: "6px 6px 0 0",
+    padding: "10px 24px",
+    color: "#f5a623",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: 2,
     cursor: "pointer",
   },
 
