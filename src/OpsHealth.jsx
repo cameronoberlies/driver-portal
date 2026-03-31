@@ -100,10 +100,10 @@ export default function OpsHealth() {
       }
 
       // Fetch profiles for name resolution
-      const { data: profiles } = await supabase.from("profiles").select("id, name, role");
+      const { data: profiles } = await supabase.from("profiles").select("id, name, role, device_os");
       if (profiles) {
         const map = {};
-        profiles.forEach((p) => { map[p.id] = p.name; });
+        profiles.forEach((p) => { map[p.id] = { name: p.name, os: p.device_os }; });
         setProfileMap(map);
       }
 
@@ -154,17 +154,26 @@ export default function OpsHealth() {
 
   function displayValue(key, val) {
     if (val && UUID_FIELDS.includes(key) && profileMap[val]) {
-      return `${profileMap[val]}`;
+      return `${profileMap[val].name}`;
     }
     return JSON.stringify(val);
   }
 
   function name(id) {
-    return profileMap[id] || "Unknown";
+    return profileMap[id]?.name || "Unknown";
+  }
+
+  function osIcon(id) {
+    const os = profileMap[id]?.os;
+    if (os === "ios") return "\uF8FF"; // Apple logo
+    if (os === "android") return "\uD83E\uDD16"; // Robot
+    return "";
   }
 
   function describeAudit(log) {
-    const actor = log.changed_by ? name(log.changed_by) : "System";
+    const os = log.changed_by ? osIcon(log.changed_by) : "";
+    const actorName = log.changed_by ? name(log.changed_by) : "System";
+    const actor = os ? `${os} ${actorName}` : actorName;
     const n = log.new_data || {};
     const o = log.old_data || {};
 
@@ -632,7 +641,7 @@ export default function OpsHealth() {
                     <span style={styles.logEvent}>#{log.record_id}</span>
                     {log.changed_by && (
                       <span style={{ ...styles.logSource, color: "#999" }}>
-                        by {profileMap[log.changed_by] || log.changed_by.slice(0, 8)}
+                        {osIcon(log.changed_by)} by {profileMap[log.changed_by]?.name || log.changed_by.slice(0, 8)}
                       </span>
                     )}
                     <span style={styles.logTime}>
