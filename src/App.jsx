@@ -4151,6 +4151,151 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
   );
 }
 
+// ─── EDIT TRIP MODAL (PENDING ONLY) ──────────────────────────────────────────
+function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
+  const [city, setCity] = useState(trip.city || "");
+  const [crmId, setCrmId] = useState(trip.crm_id || "");
+  const [tripType, setTripType] = useState(trip.trip_type || "drive");
+  const [notes, setNotes] = useState(trip.notes || "");
+  const [driverId, setDriverId] = useState(trip.driver_id || "");
+  const [secondDriverId, setSecondDriverId] = useState(trip.second_driver_id || "");
+  const [pickup, setPickup] = useState(
+    trip.scheduled_pickup ? new Date(trip.scheduled_pickup).toISOString().slice(0, 16) : ""
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const drivers = allProfiles.filter((p) => p.role === "driver");
+
+  async function handleSave() {
+    if (!city || !crmId) {
+      setError("City and CRM ID are required");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    const { data, error: err } = await supabase
+      .from("trips")
+      .update({
+        city,
+        crm_id: crmId,
+        trip_type: tripType,
+        notes,
+        driver_id: driverId,
+        designated_driver_id: driverId,
+        second_driver_id: secondDriverId || null,
+        scheduled_pickup: pickup ? new Date(pickup).toISOString() : trip.scheduled_pickup,
+      })
+      .eq("id", trip.id)
+      .select()
+      .single();
+    setSaving(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    onSaved(data);
+  }
+
+  return (
+    <div className="modal" onClick={onClose}>
+      <div className="form-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, margin: "60px auto" }}>
+        <div className="form-card-title">Edit Trip</div>
+        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 20 }}>
+          {trip.crm_id} · {trip.city}
+        </div>
+
+        <div className="form-grid">
+          <div className="field">
+            <label>Type</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {["fly", "drive"].map((t) => (
+                <button
+                  key={t}
+                  className={tripType === t ? "btn-primary" : "btn-ghost"}
+                  style={{ flex: 1, fontSize: 13 }}
+                  onClick={() => setTripType(t)}
+                >
+                  {t === "fly" ? "✈ Fly" : "🚗 Drive"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="field">
+            <label>City</label>
+            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Charlotte, NC" />
+          </div>
+          <div className="field">
+            <label>CRM ID</label>
+            <input
+              value={crmId}
+              onChange={(e) => setCrmId(e.target.value.toUpperCase())}
+              placeholder="AB123"
+              style={{ textTransform: "uppercase" }}
+            />
+          </div>
+          <div className="field">
+            <label>Scheduled Pickup</label>
+            <input
+              type="datetime-local"
+              value={pickup}
+              onChange={(e) => setPickup(e.target.value)}
+              style={{ colorScheme: "dark" }}
+            />
+          </div>
+          <div className="field">
+            <label>Driver</label>
+            <select value={driverId} onChange={(e) => setDriverId(e.target.value)}>
+              <option value="">Select driver</option>
+              {drivers.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}{d.willing_to_fly ? " (F)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Second Driver</label>
+            <select value={secondDriverId} onChange={(e) => setSecondDriverId(e.target.value)}>
+              <option value="">None</option>
+              {drivers.filter((d) => d.id !== driverId).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}{d.willing_to_fly ? " (F)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label>Notes</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Flight info, seller contact, etc."
+              rows={2}
+              style={{ resize: "vertical" }}
+            />
+          </div>
+        </div>
+
+        {error && <div style={{ color: "var(--danger)", fontSize: 13, marginTop: 12 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
+          <button className="btn-ghost" style={{ flex: 1 }} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn-primary"
+            style={{ flex: 1, opacity: saving ? 0.5 : 1 }}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── FINALIZE TRIP MODAL ──────────────────────────────────────────────────────
 function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
   const driver1 = allProfiles.find((p) => p.id === trip.driver_id);
@@ -4385,6 +4530,7 @@ function AdminTrips({
 }) {
   const [view, setView] = useState(prefillData ? "create" : "active"); // active | all | create
   const [finalizingTrip, setFinalizingTrip] = useState(null);
+  const [editingTrip, setEditingTrip] = useState(null);
   const [acting, setActing] = useState(null); // trip id being acted on
 
   async function handleEndTrip(trip) {
@@ -4445,6 +4591,17 @@ function AdminTrips({
           allProfiles={allProfiles}
           onFinalized={handleFinalized}
           onClose={() => setFinalizingTrip(null)}
+        />
+      )}
+      {editingTrip && (
+        <EditTripModal
+          trip={editingTrip}
+          allProfiles={allProfiles}
+          onSaved={(updated) => {
+            setTrips((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+            setEditingTrip(null);
+          }}
+          onClose={() => setEditingTrip(null)}
         />
       )}
 
@@ -4576,18 +4733,31 @@ function AdminTrips({
                       </td>
                       <td style={{ display: "flex", gap: 8 }}>
                         {isAdmin && trip.status === "pending" && (
-                          <button
-                            className="btn-edit"
-                            style={{
-                              background: "rgba(232,90,74,0.1)",
-                              color: "var(--danger)",
-                              borderColor: "var(--danger)",
-                            }}
-                            onClick={() => handleDeleteTrip(trip)}
-                            disabled={acting === trip.id}
-                          >
-                            {acting === trip.id ? "Deleting..." : "✕ Delete"}
-                          </button>
+                          <>
+                            <button
+                              className="btn-edit"
+                              style={{
+                                background: "rgba(245,166,35,0.1)",
+                                color: "var(--accent)",
+                                borderColor: "var(--accent)",
+                              }}
+                              onClick={() => setEditingTrip({ ...trip })}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="btn-edit"
+                              style={{
+                                background: "rgba(232,90,74,0.1)",
+                                color: "var(--danger)",
+                                borderColor: "var(--danger)",
+                              }}
+                              onClick={() => handleDeleteTrip(trip)}
+                              disabled={acting === trip.id}
+                            >
+                              {acting === trip.id ? "Deleting..." : "✕ Delete"}
+                            </button>
+                          </>
                         )}
                         {isAdmin && trip.status === "in_progress" && (
                           <button
