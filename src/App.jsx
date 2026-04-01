@@ -1769,11 +1769,23 @@ function MileageCostReport({
     ].filter(Boolean);
   })();
 
+  // ── Chart 5: Speed by Driver Over Time ──
+  const [speedDriver, setSpeedDriver] = useState("all");
+  const speedData = (() => {
+    const tripsWithSpeed = (trips ?? [])
+      .filter(t => t.speed_data && t.actual_start)
+      .filter(t => speedDriver === "all" || t.driver_id === speedDriver || t.designated_driver_id === speedDriver)
+      .sort((a, b) => new Date(a.actual_start) - new Date(b.actual_start))
+      .slice(-15);
+    return tripsWithSpeed;
+  })();
+
   const chartTabs = [
     { key: 0, label: "TREND" },
     { key: 1, label: "MILES" },
     { key: 2, label: "EFFICIENCY" },
     { key: 3, label: "TYPES" },
+    { key: 4, label: "SPEED" },
   ];
 
   return (
@@ -1946,6 +1958,66 @@ function MileageCostReport({
               <div style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: "40px 0" }}>No trips this week</div>
             ) : (
               <MiniPieChart data={tripTypeData} />
+            )}
+          </div>
+        )}
+
+        {activeChart === 4 && (
+          <div>
+            <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: 2, fontWeight: 700, marginBottom: 16, textAlign: "center", textTransform: "uppercase" }}>
+              Speed Tracking — {speedDriver === "all" ? "All Drivers" : (drivers.find(d => d.id === speedDriver)?.name || "Unknown")}
+            </div>
+
+            {/* Driver Selector */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16, justifyContent: "center" }}>
+              <button
+                onClick={() => setSpeedDriver("all")}
+                style={{
+                  padding: "5px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  background: speedDriver === "all" ? "rgba(232,180,74,0.15)" : "var(--bg)",
+                  border: `1px solid ${speedDriver === "all" ? "rgba(232,180,74,0.3)" : "var(--border)"}`,
+                  color: speedDriver === "all" ? "var(--accent)" : "var(--muted)",
+                  borderRadius: "var(--radius-sm)", letterSpacing: 0.5,
+                }}
+              >All</button>
+              {drivers.map(d => (
+                <button
+                  key={d.id}
+                  onClick={() => setSpeedDriver(d.id)}
+                  style={{
+                    padding: "5px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    background: speedDriver === d.id ? "rgba(232,180,74,0.15)" : "var(--bg)",
+                    border: `1px solid ${speedDriver === d.id ? "rgba(232,180,74,0.3)" : "var(--border)"}`,
+                    color: speedDriver === d.id ? "var(--accent)" : "var(--muted)",
+                    borderRadius: "var(--radius-sm)", letterSpacing: 0.5,
+                  }}
+                >{d.name.split(" ")[0]}</button>
+              ))}
+            </div>
+
+            {speedData.length === 0 ? (
+              <div style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: "40px 0" }}>No speed data available yet</div>
+            ) : (
+              <>
+                <MiniLineChart
+                  labels={speedData.map(t => new Date(t.actual_start).toLocaleDateString("en-US", { month: "numeric", day: "numeric" }))}
+                  datasets={[
+                    { data: speedData.map(t => t.speed_data.top_speed || 0), color: "var(--danger)" },
+                    { data: speedData.map(t => t.speed_data.avg_speed || 0), color: "var(--accent)" },
+                  ]}
+                />
+                <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 12, height: 3, borderRadius: 2, background: "var(--danger)" }} />
+                    <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>Top Speed</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 12, height: 3, borderRadius: 2, background: "var(--accent)" }} />
+                    <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>Avg Speed</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>80 mph limit ┈</span>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -3876,6 +3948,7 @@ function TripStatusBadge({ status }) {
         fontWeight: 700,
         letterSpacing: 1,
         textTransform: "uppercase",
+        whiteSpace: "nowrap",
       }}
     >
       {status.replace("_", " ")}
@@ -4689,7 +4762,7 @@ function AdminTrips({
                       <td>
                         <TripStatusBadge status={trip.status} />
                       </td>
-                      <td>{trip.trip_type === "fly" ? "✈ Fly" : "🚗 Drive"}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>{trip.trip_type === "fly" ? "✈ Fly" : "🚗 Drive"}</td>
                       <td style={{ fontWeight: 600 }}>
                         {getDriverNames(trip)}
                       </td>
@@ -4716,7 +4789,21 @@ function AdminTrips({
                           trip.crm_id
                         )}
                       </td>
-                      <td>{trip.city}</td>
+                      <td>
+                        {trip.city}
+                        {trip.speed_data && (trip.status === "completed" || trip.status === "finalized") && (
+                          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <span>⚡ {trip.speed_data.top_speed} mph top</span>
+                            <span>{trip.speed_data.avg_speed} mph avg</span>
+                            {trip.speed_data.seconds_over_80 > 0 && (
+                              <span style={{ color: "var(--accent)" }}>{Math.round(trip.speed_data.seconds_over_80 / 60)}m &gt;80</span>
+                            )}
+                            {trip.speed_data.seconds_over_90 > 0 && (
+                              <span style={{ color: "var(--danger)" }}>{Math.round(trip.speed_data.seconds_over_90 / 60)}m &gt;90</span>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ color: "var(--muted)", fontSize: 12 }}>
                         {new Date(trip.scheduled_pickup).toLocaleDateString(
                           "en-US",
