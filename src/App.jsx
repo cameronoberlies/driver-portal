@@ -4159,9 +4159,17 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
   const [notes, setNotes] = useState(trip.notes || "");
   const [driverId, setDriverId] = useState(trip.driver_id || "");
   const [secondDriverId, setSecondDriverId] = useState(trip.second_driver_id || "");
-  const [pickup, setPickup] = useState(
-    trip.scheduled_pickup ? new Date(trip.scheduled_pickup).toISOString().slice(0, 16) : ""
-  );
+  const [pickup, setPickup] = useState(() => {
+    if (!trip.scheduled_pickup) return "";
+    const d = new Date(trip.scheduled_pickup);
+    // Format as local datetime for datetime-local input
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    const h = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${y}-${mo}-${da}T${h}:${mi}`;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const drivers = allProfiles.filter((p) => p.role === "driver");
@@ -4197,10 +4205,10 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
   }
 
   return (
-    <div className="modal" onClick={onClose}>
-      <div className="form-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, margin: "60px auto" }}>
-        <div className="form-card-title">Edit Trip</div>
-        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 20 }}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 500 }}>
+        <div className="modal-title">Edit Trip</div>
+        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 24 }}>
           {trip.crm_id} · {trip.city}
         </div>
 
@@ -4211,8 +4219,8 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
               {["fly", "drive"].map((t) => (
                 <button
                   key={t}
-                  className={tripType === t ? "btn-primary" : "btn-ghost"}
-                  style={{ flex: 1, fontSize: 13 }}
+                  className={`btn ${tripType === t ? "btn-primary" : "btn-ghost"}`}
+                  style={{ flex: 1, fontSize: 12 }}
                   onClick={() => setTripType(t)}
                 >
                   {t === "fly" ? "✈ Fly" : "🚗 Drive"}
@@ -4266,29 +4274,27 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
           </div>
           <div className="field" style={{ gridColumn: "1 / -1" }}>
             <label>Notes</label>
-            <textarea
+            <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Flight info, seller contact, etc."
-              rows={2}
-              style={{ resize: "vertical" }}
             />
           </div>
         </div>
 
-        {error && <div style={{ color: "var(--danger)", fontSize: 13, marginTop: 12 }}>{error}</div>}
+        {error && <div className="error-msg">{error}</div>}
 
-        <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-          <button className="btn-ghost" style={{ flex: 1 }} onClick={onClose}>
+        <div className="modal-actions">
+          <button className="btn btn-ghost" onClick={onClose}>
             Cancel
           </button>
           <button
-            className="btn-primary"
-            style={{ flex: 1, opacity: saving ? 0.5 : 1 }}
+            className="btn btn-primary"
+            style={{ opacity: saving ? 0.5 : 1 }}
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? "Saving..." : "Save Changes"}
+            {saving ? "Saving..." : "Save Changes →"}
           </button>
         </div>
       </div>
@@ -4755,7 +4761,7 @@ function AdminTrips({
                               onClick={() => handleDeleteTrip(trip)}
                               disabled={acting === trip.id}
                             >
-                              {acting === trip.id ? "Deleting..." : "✕ Delete"}
+                              {acting === trip.id ? "..." : "Delete"}
                             </button>
                           </>
                         )}
