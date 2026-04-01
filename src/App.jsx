@@ -4830,7 +4830,7 @@ function AdminTrips({
                             )
                           : "—"}
                       </td>
-                      <td style={{ display: "flex", gap: 8 }}>
+                      <td style={{ display: "flex", gap: 8, minWidth: 140 }}>
                         {isAdmin && trip.status === "pending" && (
                           <>
                             <button
