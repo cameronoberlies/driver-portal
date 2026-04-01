@@ -218,7 +218,7 @@ const css = `
   }
   .modal-title { font-family: var(--font-head); font-size: 20px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 24px; }
   .modal-actions { display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end; }
-  .btn-edit { background: transparent; color: var(--accent2); border: 1px solid var(--accent2); padding: 5px 12px; font-family: var(--font-head); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; transition: all 0.2s; border-radius: var(--radius-sm); }
+  .btn-edit { background: transparent; color: var(--accent2); border: 1px solid var(--accent2); padding: 5px 12px; font-family: var(--font-head); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; transition: all 0.2s; border-radius: var(--radius-sm); margin-right: 6px; }
   .btn-edit:hover { background: var(--accent2); color: #0a0c10; }
   .btn-edit:active { transform: scale(0.96); }
 
@@ -4830,7 +4830,7 @@ function AdminTrips({
                             )
                           : "—"}
                       </td>
-                      <td style={{ display: "flex", gap: 8, minWidth: 140 }}>
+                      <td style={{ whiteSpace: "nowrap" }}>
                         {isAdmin && trip.status === "pending" && (
                           <>
                             <button
