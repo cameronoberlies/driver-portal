@@ -3073,7 +3073,13 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
             </tr>
           </thead>
           <tbody>
-            {allProfiles.map((user) => (
+            {[...allProfiles].sort((a, b) => {
+              const roleOrder = { admin: 0, caller: 1, driver: 2 };
+              const roleA = roleOrder[a.role] ?? 3;
+              const roleB = roleOrder[b.role] ?? 3;
+              if (roleA !== roleB) return roleA - roleB;
+              return (a.name || "").localeCompare(b.name || "");
+            }).map((user) => (
               <tr key={user.id}>
                 <td style={{ fontWeight: 600 }}>{user.name}</td>
                 <td style={{ color: "var(--muted)", fontSize: 13 }}>{user.email || "—"}</td>
