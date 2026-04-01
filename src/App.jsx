@@ -4175,8 +4175,8 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
   const drivers = allProfiles.filter((p) => p.role === "driver");
 
   async function handleSave() {
-    if (!city || !crmId) {
-      setError("City and CRM ID are required");
+    if (!driverId) {
+      setError("Driver is required");
       return;
     }
     setSaving(true);

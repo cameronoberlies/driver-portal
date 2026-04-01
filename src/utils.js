@@ -94,8 +94,8 @@ export function parseCarpagePickup(timeText) {
 // ─── TRIP HELPERS ─────────────────────────────────────────────────────────────
 
 export function validateTripForm(form) {
-  if (!form.driver_id || !form.city || !form.crm_id || !form.scheduled_pickup) {
-    return "Driver, city, CRM ID and pickup time are required.";
+  if (!form.driver_id || !form.scheduled_pickup) {
+    return "Driver and pickup time are required.";
   }
   if (form.trip_type === "drive" && !form.second_driver_id) {
     return "Drive trips require a second driver.";
