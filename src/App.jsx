@@ -203,7 +203,7 @@ const css = `
   .badge-miss { background: rgba(232,90,74,0.1); color: var(--danger); }
 
   .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200;
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 10000;
     display: flex; align-items: center; justify-content: center; animation: fadeIn 0.15s ease;
   }
   .modal {
@@ -2134,8 +2134,10 @@ function LiveDriversMap({ drivers }) {
   const mapInstanceRef = useRef(null);
   const markersRef = useRef({});
   const [locations, setLocations] = useState([]);
+  const [activeStops, setActiveStops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [showTripLogs, setShowTripLogs] = useState(false);
 
   // Load Leaflet CSS + JS dynamically
   useEffect(() => {
@@ -2196,14 +2198,18 @@ function LiveDriversMap({ drivers }) {
 
   async function fetchLocations(map) {
     setLoading(true);
-    const { data } = await supabase.from("driver_locations").select("*");
-    setLocations(data ?? []);
+    const [{ data: locs }, { data: stops }] = await Promise.all([
+      supabase.from("driver_locations").select("*"),
+      supabase.from("trip_stops").select("*").is("ended_at", null),
+    ]);
+    setLocations(locs ?? []);
+    setActiveStops(stops ?? []);
     setLastRefresh(new Date());
-    updateMarkers(data ?? [], map);
+    updateMarkers(locs ?? [], stops ?? [], map);
     setLoading(false);
   }
 
-  function updateMarkers(locs, map) {
+  function updateMarkers(locs, stops, map) {
     if (!map || !window.L) return;
 
     // Clear old markers
@@ -2216,6 +2222,7 @@ function LiveDriversMap({ drivers }) {
     locs.forEach((loc) => {
       const driver = drivers.find((d) => d.id === loc.driver_id);
       const name = driver?.name ?? "Unknown Driver";
+      const firstName = name.split(" ")[0];
       const age = Math.floor((new Date() - new Date(loc.updated_at)) / 1000);
       const ageLabel =
         age < 60
@@ -2223,22 +2230,34 @@ function LiveDriversMap({ drivers }) {
           : age < 3600
             ? `${Math.floor(age / 60)}m ago`
             : `${Math.floor(age / 3600)}h ago`;
-      const isRecent = age < 120; // green if updated within 2 min
+      const isRecent = age < 120;
+      const activeStop = stops.find((s) => s.driver_id === loc.driver_id);
+      const isStopped = !!activeStop;
+      const color = isStopped ? "#ff453a" : isRecent ? "#4ae885" : "#f5a623";
+
+      let stopInfo = "";
+      if (isStopped) {
+        const stopMins = Math.round((Date.now() - new Date(activeStop.started_at).getTime()) / 60000);
+        stopInfo = `<div style="font-size: 11px; color: #ff453a; font-weight: 700; margin-top: 4px;">STOPPED ${stopMins}m</div>`;
+      }
 
       const icon = window.L.divIcon({
         className: "",
         html: `
-          <div style="
-            background: ${isRecent ? "#4ae885" : "#f5a623"};
-            border: 2px solid #0d0f12;
-            border-radius: 50%;
-            width: 14px;
-            height: 14px;
-            box-shadow: 0 0 ${isRecent ? "8px #4ae885" : "6px #f5a623"};
-          "></div>
+          <div style="display: flex; flex-direction: column; align-items: center;">
+            <div style="
+              background: ${color};
+              border: 2px solid #0d0f12;
+              border-radius: 50%;
+              width: 14px;
+              height: 14px;
+              box-shadow: 0 0 ${isStopped ? "10px #ff453a" : isRecent ? "8px #4ae885" : "6px #f5a623"};
+            "></div>
+            <div style="font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.9); margin-top: 2px; white-space: nowrap;">${firstName}</div>
+          </div>
         `,
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
+        iconSize: [60, 30],
+        iconAnchor: [30, 7],
       });
 
       const marker = window.L.marker([loc.latitude, loc.longitude], { icon })
@@ -2247,7 +2266,8 @@ function LiveDriversMap({ drivers }) {
           <div style="font-family: 'Barlow Condensed', sans-serif; min-width: 140px; background: #161a20; color: #e8ecf0; border: none;">
             <div style="font-size: 16px; font-weight: 800; letter-spacing: 1px; margin-bottom: 4px;">${name}</div>
             <div style="font-size: 11px; color: #6b7585; letter-spacing: 1px;">LAST UPDATE</div>
-            <div style="font-size: 13px; font-weight: 600; color: ${isRecent ? "#4ae885" : "#f5a623"};">${ageLabel}</div>
+            <div style="font-size: 13px; font-weight: 600; color: ${color};">${ageLabel}</div>
+            ${stopInfo}
             <div style="font-size: 10px; color: #444; margin-top: 6px;">${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}</div>
           </div>
         `,
@@ -2333,14 +2353,23 @@ function LiveDriversMap({ drivers }) {
             Last refresh: {lastRefresh.toLocaleTimeString()}
           </div>
         </div>
-        <button
-          className="btn btn-ghost"
-          style={{ padding: "6px 14px", fontSize: 12 }}
-          onClick={handleRefresh}
-          disabled={loading}
-        >
-          {loading ? "Refreshing..." : "↻ Refresh"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="btn btn-primary"
+            style={{ padding: "6px 14px", fontSize: 11 }}
+            onClick={() => setShowTripLogs(true)}
+          >
+            TRIP LOGS
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "6px 14px", fontSize: 12 }}
+            onClick={handleRefresh}
+            disabled={loading}
+          >
+            {loading ? "Refreshing..." : "↻ Refresh"}
+          </button>
+        </div>
       </div>
 
       {/* Driver status pills */}
@@ -2494,6 +2523,122 @@ function LiveDriversMap({ drivers }) {
           <span>Updated &gt; 2 min ago</span>
         </div>
       </div>
+
+      {/* Trip Logs Modal */}
+      {showTripLogs && (
+        <div className="modal-overlay" onClick={() => setShowTripLogs(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 560, maxHeight: "80vh", overflow: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div className="modal-title" style={{ marginBottom: 0 }}>Live Trip Logs</div>
+              <button
+                className="btn btn-ghost"
+                style={{ padding: "6px 16px", fontSize: 11 }}
+                onClick={() => setShowTripLogs(false)}
+              >
+                CLOSE
+              </button>
+            </div>
+            <WebTripLogs drivers={drivers} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WebTripLogs({ drivers }) {
+  const [trips, setTrips] = useState([]);
+  const [stops, setStops] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadLogs();
+    const interval = setInterval(loadLogs, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function loadLogs() {
+    const [{ data: activeTrips }, { data: allStops }] = await Promise.all([
+      supabase.from("trips").select("*").in("status", ["in_progress"]),
+      supabase.from("trip_stops").select("*").order("started_at", { ascending: false }).limit(50),
+    ]);
+    setTrips(activeTrips ?? []);
+    setStops(allStops ?? []);
+    setLoading(false);
+  }
+
+  function getName(id) {
+    return drivers.find((d) => d.id === id)?.name ?? "Unknown";
+  }
+
+  if (loading) return <div style={{ textAlign: "center", color: "var(--muted)", padding: 40 }}>Loading...</div>;
+  if (trips.length === 0) return <div style={{ textAlign: "center", color: "var(--muted)", padding: 40 }}>No active trips</div>;
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      {trips.map((trip) => {
+        const driverName = getName(trip.designated_driver_id || trip.driver_id);
+        const tripStops = stops.filter((s) => s.trip_id === trip.id);
+        const activeStop = tripStops.find((s) => !s.ended_at);
+        const elapsed = trip.actual_start ? Math.round((Date.now() - new Date(trip.actual_start).getTime()) / 60000) : 0;
+
+        return (
+          <div key={trip.id} style={{
+            background: "var(--bg)",
+            border: `1px solid ${activeStop ? "rgba(255,69,58,0.3)" : "var(--border)"}`,
+            borderLeft: `3px solid ${activeStop ? "#ff453a" : "var(--accent)"}`,
+            borderRadius: "var(--radius-sm)",
+            padding: "16px 20px",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>{driverName}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{trip.city} · {trip.crm_id || "—"}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 20, fontWeight: 900, color: "var(--accent)" }}>{elapsed}m</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5 }}>ELAPSED</div>
+              </div>
+            </div>
+
+            {activeStop && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                background: "rgba(255,69,58,0.1)", border: "1px solid rgba(255,69,58,0.25)",
+                borderRadius: 4, padding: "6px 12px", marginBottom: 8,
+              }}>
+                <div style={{ width: 8, height: 8, borderRadius: 4, background: "#ff453a" }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#ff453a", letterSpacing: 1.5 }}>
+                  STOPPED {Math.round((Date.now() - new Date(activeStop.started_at).getTime()) / 60000)}m
+                </span>
+              </div>
+            )}
+
+            {tripStops.length > 0 ? (
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 4 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "var(--muted)", letterSpacing: 2, marginBottom: 4 }}>
+                  STOPS ({tripStops.length})
+                </div>
+                {tripStops.map((stop) => (
+                  <div key={stop.id} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 12 }}>
+                    <span style={{ color: "var(--muted)" }}>
+                      {new Date(stop.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                    <span style={{ fontWeight: 700, color: stop.ended_at ? "var(--text)" : "#ff453a" }}>
+                      {stop.ended_at
+                        ? `${stop.duration_minutes}m`
+                        : `${Math.round((Date.now() - new Date(stop.started_at).getTime()) / 60000)}m (active)`
+                      }
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>No stops recorded</div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -4801,6 +4946,7 @@ function AdminTrips({
                             {trip.speed_data.seconds_over_90 > 0 && (
                               <span style={{ color: "var(--danger)" }}>{Math.round(trip.speed_data.seconds_over_90 / 60)}m &gt;90</span>
                             )}
+                            {/* Stops viewable in Live Trip Logs */}
                           </div>
                         )}
                       </td>
