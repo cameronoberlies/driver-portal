@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   getWeekBounds,
@@ -4574,6 +4574,65 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
             )}
           </div>
         </div>
+        {/* Speed Analytics */}
+        {trip.speed_data && (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 10,
+            marginBottom: 16,
+          }}>
+            <div style={{
+              background: "var(--bg)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              padding: "12px 14px",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 4 }}>TOP SPEED</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text)" }}>{trip.speed_data.top_speed}</div>
+              <div style={{ fontSize: 10, color: "var(--muted)" }}>mph</div>
+            </div>
+            <div style={{
+              background: "var(--bg)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              padding: "12px 14px",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 4 }}>AVG SPEED</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text)" }}>{trip.speed_data.avg_speed}</div>
+              <div style={{ fontSize: 10, color: "var(--muted)" }}>mph</div>
+            </div>
+            <div style={{
+              background: trip.speed_data.seconds_over_80 > 0 ? "rgba(232,180,74,0.08)" : "var(--bg)",
+              border: `1px solid ${trip.speed_data.seconds_over_80 > 0 ? "rgba(232,180,74,0.25)" : "var(--border)"}`,
+              borderRadius: "var(--radius-sm)",
+              padding: "12px 14px",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 4 }}>OVER 80</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: trip.speed_data.seconds_over_80 > 0 ? "var(--accent)" : "var(--muted)" }}>
+                {Math.round(trip.speed_data.seconds_over_80 / 60)}
+              </div>
+              <div style={{ fontSize: 10, color: "var(--muted)" }}>min</div>
+            </div>
+            <div style={{
+              background: trip.speed_data.seconds_over_90 > 0 ? "rgba(232,90,74,0.08)" : "var(--bg)",
+              border: `1px solid ${trip.speed_data.seconds_over_90 > 0 ? "rgba(232,90,74,0.25)" : "var(--border)"}`,
+              borderRadius: "var(--radius-sm)",
+              padding: "12px 14px",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 4 }}>OVER 90</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: trip.speed_data.seconds_over_90 > 0 ? "var(--danger)" : "var(--muted)" }}>
+                {Math.round(trip.speed_data.seconds_over_90 / 60)}
+              </div>
+              <div style={{ fontSize: 10, color: "var(--muted)" }}>min</div>
+            </div>
+          </div>
+        )}
+
         <div className="form-grid">
           <div className="field">
             <label>Pay — {driver1?.name} ($)</label>
@@ -4863,22 +4922,7 @@ function AdminTrips({
                           trip.crm_id
                         )}
                       </td>
-                      <td>
-                        {trip.city}
-                        {trip.speed_data && (trip.status === "completed" || trip.status === "finalized") && (
-                          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <span>⚡ {trip.speed_data.top_speed} mph top</span>
-                            <span>{trip.speed_data.avg_speed} mph avg</span>
-                            {trip.speed_data.seconds_over_80 > 0 && (
-                              <span style={{ color: "var(--accent)" }}>{Math.round(trip.speed_data.seconds_over_80 / 60)}m &gt;80</span>
-                            )}
-                            {trip.speed_data.seconds_over_90 > 0 && (
-                              <span style={{ color: "var(--danger)" }}>{Math.round(trip.speed_data.seconds_over_90 / 60)}m &gt;90</span>
-                            )}
-                            {/* Stops viewable in Live Trip Logs */}
-                          </div>
-                        )}
-                      </td>
+                      <td>{trip.city}</td>
                       <td style={{ color: "var(--muted)", fontSize: 12 }}>
                         {new Date(trip.scheduled_pickup).toLocaleDateString(
                           "en-US",

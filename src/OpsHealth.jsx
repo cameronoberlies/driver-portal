@@ -165,8 +165,8 @@ export default function OpsHealth() {
 
   function osIcon(id) {
     const os = profileMap[id]?.os;
-    if (os === "ios") return "\uF8FF"; // Apple logo
-    if (os === "android") return "\uD83E\uDD16"; // Robot
+    if (os === "ios") return "[iOS]";
+    if (os === "android") return "[AND]";
     return "";
   }
 
