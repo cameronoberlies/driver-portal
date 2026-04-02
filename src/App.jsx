@@ -1740,18 +1740,25 @@ function MileageCostReport({
     return weeks;
   })();
 
-  // ── Chart 3: Cost per Mile Efficiency ──
-  const efficiencyData = drivers.map((d) => {
-    const de = weekFiltered.filter((e) => e.driver_id === d.id);
-    const miles = de.reduce((t, e) => t + Number(e.miles ?? 0), 0);
-    const actual = de.reduce((t, e) => t + Number(e.actual_cost ?? 0), 0);
-    const costPerMile = miles > 0 ? actual / miles : 0;
-    return { name: d.name, miles, actual, costPerMile };
-  }).filter((d) => d.miles > 0).sort((a, b) => a.costPerMile - b.costPerMile);
-
-  const avgCostPerMile = efficiencyData.length > 0
-    ? efficiencyData.reduce((t, e) => t + e.costPerMile, 0) / efficiencyData.length
-    : 0;
+  // ── Chart 3: Cost per Mile (total, 8 weeks) ──
+  const totalCostPerMile = totalMiles > 0 ? totalActual / totalMiles : 0;
+  const efficiencyTrend = (() => {
+    const weeks = [];
+    for (let i = 7; i >= 0; i--) {
+      const { start, end } = getWeekBoundsAgo(i);
+      const wkEntries = entries.filter((e) => {
+        const d = new Date(e.date + "T12:00:00");
+        return d >= start && d <= end;
+      });
+      const miles = wkEntries.reduce((t, e) => t + Number(e.miles ?? 0), 0);
+      const actual = wkEntries.reduce((t, e) => t + Number(e.actual_cost ?? 0), 0);
+      weeks.push({
+        label: start.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        cpm: miles > 0 ? parseFloat((actual / miles).toFixed(2)) : 0,
+      });
+    }
+    return weeks;
+  })();
 
   // ── Chart 4: Trip Type Breakdown (pie) ──
   const tripTypeData = (() => {
@@ -1805,17 +1812,6 @@ function MileageCostReport({
             <select value={reportType} onChange={(e) => setReportType(e.target.value)}>
               <option value="weekly">This Week</option>
               <option value="monthly">This Month</option>
-            </select>
-          </div>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label>Driver</label>
-            <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)}>
-              <option value="all">All Drivers</option>
-              {drivers.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}{d.willing_to_fly ? " (F)" : ""}
-                </option>
-              ))}
             </select>
           </div>
           <button
@@ -1915,37 +1911,19 @@ function MileageCostReport({
         {activeChart === 2 && (
           <div>
             <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: 2, fontWeight: 700, marginBottom: 16, textAlign: "center", textTransform: "uppercase" }}>
-              Cost per Mile Efficiency
+              Cost per Mile (8 Weeks)
             </div>
-            {efficiencyData.length === 0 ? (
-              <div style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: "40px 0" }}>No data this week</div>
-            ) : (
-              <div style={{ display: "grid", gap: 12 }}>
-                {efficiencyData.map((d) => {
-                  const isEfficient = d.costPerMile <= avgCostPerMile;
-                  return (
-                    <div key={d.name} style={{
-                      background: "var(--bg)",
-                      border: "1px solid var(--border)",
-                      borderLeft: `3px solid ${isEfficient ? "var(--success)" : "var(--danger)"}`,
-                      borderRadius: "var(--radius-sm)",
-                      padding: "14px 18px",
-                    }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>{d.name}</span>
-                        <span style={{ fontSize: 16, fontWeight: 900, color: isEfficient ? "var(--success)" : "var(--danger)" }}>
-                          {formatCurrency(d.costPerMile)}/mi
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", gap: 16 }}>
-                        <span style={{ fontSize: 11, color: "var(--muted)" }}>{d.miles.toFixed(1)} mi</span>
-                        <span style={{ fontSize: 11, color: "var(--muted)" }}>{formatCurrency(d.actual)} total</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <div style={{ textAlign: "center", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 2, fontWeight: 700 }}>THIS WEEK</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: "var(--success)" }}>{formatCurrency(totalCostPerMile)}/mi</div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>{totalMiles.toFixed(0)} mi · {formatCurrency(totalActual)} actual</div>
+            </div>
+            <MiniLineChart
+              labels={efficiencyTrend.map((w) => w.label)}
+              datasets={[
+                { data: efficiencyTrend.map((w) => w.cpm), color: "var(--success)" },
+              ]}
+            />
           </div>
         )}
 
@@ -2021,55 +1999,6 @@ function MileageCostReport({
             )}
           </div>
         )}
-      </div>
-
-      {/* Driver Breakdown Cards */}
-      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "var(--muted)", marginBottom: 12, textTransform: "uppercase" }}>
-        By Driver This Week
-      </div>
-      <div style={{ display: "grid", gap: 12, marginBottom: 28 }}>
-        {drivers.map((driver) => {
-          const de = weekFiltered.filter((e) => e.driver_id === driver.id);
-          const actual = de.reduce((t, e) => t + Number(e.actual_cost ?? 0), 0);
-          const estimated = de.reduce((t, e) => t + Number(e.estimated_cost ?? 0), 0);
-          const miles = de.reduce((t, e) => t + Number(e.miles ?? 0), 0);
-          const v = actual - estimated;
-          if (de.length === 0) return null;
-          return (
-            <div key={driver.id} style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderLeft: "3px solid var(--accent2)",
-              borderRadius: "var(--radius-sm)",
-              padding: "16px 20px",
-            }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", marginBottom: 12 }}>
-                {driver.name}
-                {driver.willing_to_fly && <span style={{ color: "var(--accent)", marginLeft: 8, fontSize: 12, fontWeight: 700 }}>(F)</span>}
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 }}>MILES</div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>{miles.toFixed(1)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 }}>ACTUAL</div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>{formatCurrency(actual)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 }}>ESTIMATED</div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>{formatCurrency(estimated)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1.5, fontWeight: 700, marginBottom: 2 }}>VARIANCE</div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: v > 0 ? "var(--danger)" : "var(--success)" }}>
-                    {v >= 0 ? "+" : ""}{formatCurrency(v)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
       {/* Per-entry table */}
