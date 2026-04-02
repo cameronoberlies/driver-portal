@@ -21,15 +21,17 @@ const SOURCE_COLORS = {
   edge_function: "#bf5af2",
 };
 
+function formatET(dateStr) {
+  return new Date(dateStr).toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit", timeZone: "America/New_York",
+  }) + " ET";
+}
+
 function TimeAgo({ date }) {
   const diff = Date.now() - new Date(date).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return <span>just now</span>;
-  if (mins < 60) return <span>{mins}m ago</span>;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return <span>{hours}h ago</span>;
-  const days = Math.floor(hours / 24);
-  return <span>{days}d ago</span>;
+  const relative = mins < 1 ? "just now" : mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.floor(mins / 60)}h ago` : `${Math.floor(mins / 1440)}d ago`;
+  return <span>{formatET(date)} <span style={{ color: "#444", marginLeft: 6 }}>{relative}</span></span>;
 }
 
 export default function OpsHealth() {

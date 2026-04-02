@@ -2551,7 +2551,7 @@ function WebTripLogs({ drivers }) {
                 {tripStops.map((stop) => (
                   <div key={stop.id} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 12 }}>
                     <span style={{ color: "var(--muted)" }}>
-                      {new Date(stop.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                      {new Date(stop.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET
                     </span>
                     <span style={{ fontWeight: 700, color: stop.ended_at ? "var(--text)" : "#ff453a" }}>
                       {stop.ended_at
@@ -4575,7 +4575,7 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
           </div>
         </div>
         {/* Speed Analytics */}
-        {trip.speed_data && (
+        {trip.speed_data && trip.speed_data.top_speed > 0 && (
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, 1fr)",
