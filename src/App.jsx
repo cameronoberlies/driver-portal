@@ -2475,9 +2475,28 @@ function LiveDriversMap({ drivers }) {
   );
 }
 
+const WEB_LOCATIONIQ_KEY = "pk.ad8425665c12e1b7f5d7827258d59077";
+const webLocationCache = {};
+
+async function webReverseGeocode(lat, lon) {
+  const key = `${parseFloat(lat).toFixed(3)},${parseFloat(lon).toFixed(3)}`;
+  if (webLocationCache[key]) return webLocationCache[key];
+  try {
+    const res = await fetch(`https://us1.locationiq.com/v1/reverse?key=${WEB_LOCATIONIQ_KEY}&lat=${lat}&lon=${lon}&format=json`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const city = data.address?.city || data.address?.town || data.address?.village || data.address?.county || "";
+    const state = data.address?.state || "";
+    const result = city && state ? `${city}, ${state}` : city || state || null;
+    webLocationCache[key] = result;
+    return result;
+  } catch { return null; }
+}
+
 function WebTripLogs({ drivers }) {
   const [trips, setTrips] = useState([]);
   const [stops, setStops] = useState([]);
+  const [stopLocations, setStopLocations] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -2494,6 +2513,13 @@ function WebTripLogs({ drivers }) {
     setTrips(activeTrips ?? []);
     setStops(allStops ?? []);
     setLoading(false);
+    for (const stop of (allStops ?? [])) {
+      if (stop.latitude && stop.longitude && !stopLocations[stop.id]) {
+        webReverseGeocode(stop.latitude, stop.longitude).then(loc => {
+          if (loc) setStopLocations(prev => ({ ...prev, [stop.id]: loc }));
+        });
+      }
+    }
   }
 
   function getName(id) {
@@ -2550,9 +2576,14 @@ function WebTripLogs({ drivers }) {
                 </div>
                 {tripStops.map((stop) => (
                   <div key={stop.id} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 12 }}>
-                    <span style={{ color: "var(--muted)" }}>
-                      {new Date(stop.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET
-                    </span>
+                    <div>
+                      <span style={{ color: "var(--muted)" }}>
+                        {new Date(stop.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET
+                      </span>
+                      {stopLocations[stop.id] && (
+                        <div style={{ fontSize: 10, color: "#555", marginTop: 1 }}>{stopLocations[stop.id]}</div>
+                      )}
+                    </div>
                     <span style={{ fontWeight: 700, color: stop.ended_at ? "var(--text)" : "#ff453a" }}>
                       {stop.ended_at
                         ? `${stop.duration_minutes}m`
