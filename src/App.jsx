@@ -2494,19 +2494,16 @@ async function webReverseGeocode(lat, lon) {
 }
 
 function WebTripLogs({ drivers }) {
+  const [mode, setMode] = useState("live");
   const [trips, setTrips] = useState([]);
   const [stops, setStops] = useState([]);
   const [pauseEvents, setPauseEvents] = useState([]);
   const [stopLocations, setStopLocations] = useState({});
   const [loading, setLoading] = useState(true);
+  const [historyDate, setHistoryDate] = useState(new Date().toISOString().split("T")[0]);
+  const [historyDriver, setHistoryDriver] = useState("all");
 
-  useEffect(() => {
-    loadLogs();
-    const interval = setInterval(loadLogs, 15000);
-    return () => clearInterval(interval);
-  }, []);
-
-  async function loadLogs() {
+  async function loadLive() {
     const [{ data: activeTrips }, { data: allStops }, { data: pauses }] = await Promise.all([
       supabase.from("trips").select("*").in("status", ["in_progress"]),
       supabase.from("trip_stops").select("*").order("started_at", { ascending: false }).limit(50),
@@ -2516,30 +2513,139 @@ function WebTripLogs({ drivers }) {
     setStops(allStops ?? []);
     setPauseEvents(pauses ?? []);
     setLoading(false);
-    for (const stop of (allStops ?? [])) {
+    geocodeStops(allStops ?? []);
+  }
+
+  async function loadHistory() {
+    setLoading(true);
+    let tripQuery = supabase.from("trips").select("*")
+      .in("status", ["completed", "finalized"])
+      .gte("actual_start", historyDate + "T00:00:00")
+      .lte("actual_start", historyDate + "T23:59:59")
+      .order("actual_start", { ascending: false });
+
+    if (historyDriver !== "all") {
+      tripQuery = tripQuery.or(`driver_id.eq.${historyDriver},designated_driver_id.eq.${historyDriver}`);
+    }
+
+    const { data: histTrips } = await tripQuery;
+    const tripIds = (histTrips ?? []).map((t) => t.id);
+
+    let histStops = [];
+    let histPauses = [];
+    if (tripIds.length > 0) {
+      const [{ data: s }, { data: p }] = await Promise.all([
+        supabase.from("trip_stops").select("*").in("trip_id", tripIds).order("started_at", { ascending: false }),
+        supabase.from("system_logs").select("*").in("event", ["trip_paused", "trip_resumed"]).order("created_at", { ascending: false }).limit(100),
+      ]);
+      histStops = s ?? [];
+      histPauses = (p ?? []).filter((pe) => tripIds.includes(pe.metadata?.trip_id));
+    }
+
+    setTrips(histTrips ?? []);
+    setStops(histStops);
+    setPauseEvents(histPauses);
+    setLoading(false);
+    geocodeStops(histStops);
+  }
+
+  function geocodeStops(stopsToGeocode) {
+    for (const stop of stopsToGeocode) {
       if (stop.latitude && stop.longitude && !stopLocations[stop.id]) {
-        webReverseGeocode(stop.latitude, stop.longitude).then(loc => {
-          if (loc) setStopLocations(prev => ({ ...prev, [stop.id]: loc }));
+        webReverseGeocode(stop.latitude, stop.longitude).then((loc) => {
+          if (loc) setStopLocations((prev) => ({ ...prev, [stop.id]: loc }));
         });
       }
     }
   }
 
+  useEffect(() => {
+    if (mode === "live") {
+      loadLive();
+      const interval = setInterval(loadLive, 15000);
+      return () => clearInterval(interval);
+    } else {
+      loadHistory();
+    }
+  }, [mode, historyDate, historyDriver]);
+
   function getName(id) {
     return drivers.find((d) => d.id === id)?.name ?? "Unknown";
   }
 
-  if (loading) return <div style={{ textAlign: "center", color: "var(--muted)", padding: 40 }}>Loading...</div>;
-  if (trips.length === 0) return <div style={{ textAlign: "center", color: "var(--muted)", padding: 40 }}>No active trips</div>;
-
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {trips.map((trip) => {
-        const driverName = getName(trip.designated_driver_id || trip.driver_id);
-        const tripStops = stops.filter((s) => s.trip_id === trip.id);
-        const tripPauses = pauseEvents.filter((p) => p.metadata?.trip_id === trip.id);
-        const activeStop = tripStops.find((s) => !s.ended_at);
-        const elapsed = trip.actual_start ? Math.round((Date.now() - new Date(trip.actual_start).getTime()) / 60000) : 0;
+    <div>
+      {/* Mode Toggle */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button
+          onClick={() => setMode("live")}
+          style={{
+            flex: 1, padding: "8px 0", fontSize: 11, fontWeight: 700, letterSpacing: 2, cursor: "pointer",
+            background: mode === "live" ? "rgba(232,180,74,0.1)" : "var(--bg)",
+            border: `1px solid ${mode === "live" ? "rgba(232,180,74,0.3)" : "var(--border)"}`,
+            color: mode === "live" ? "var(--accent)" : "var(--muted)",
+            borderRadius: "var(--radius-sm)",
+          }}
+        >LIVE</button>
+        <button
+          onClick={() => setMode("history")}
+          style={{
+            flex: 1, padding: "8px 0", fontSize: 11, fontWeight: 700, letterSpacing: 2, cursor: "pointer",
+            background: mode === "history" ? "rgba(232,180,74,0.1)" : "var(--bg)",
+            border: `1px solid ${mode === "history" ? "rgba(232,180,74,0.3)" : "var(--border)"}`,
+            color: mode === "history" ? "var(--accent)" : "var(--muted)",
+            borderRadius: "var(--radius-sm)",
+          }}
+        >HISTORY</button>
+      </div>
+
+      {/* History Filters */}
+      {mode === "history" && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            type="date"
+            value={historyDate}
+            onChange={(e) => setHistoryDate(e.target.value)}
+            max={new Date().toISOString().split("T")[0]}
+            style={{
+              background: "var(--bg)", border: "1px solid var(--accent)", borderRadius: "var(--radius-sm)",
+              color: "var(--accent)", padding: "6px 12px", fontSize: 12, colorScheme: "dark",
+            }}
+          />
+          <select
+            value={historyDriver}
+            onChange={(e) => setHistoryDriver(e.target.value)}
+            style={{
+              background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)",
+              color: "var(--text)", padding: "6px 12px", fontSize: 12,
+            }}
+          >
+            <option value="all">All Drivers</option>
+            {drivers.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {loading && <div style={{ textAlign: "center", color: "var(--muted)", padding: 40 }}>Loading...</div>}
+
+      {!loading && trips.length === 0 && (
+        <div style={{ textAlign: "center", color: "var(--muted)", padding: 40 }}>
+          {mode === "live" ? "No active trips" : "No trips found for this date"}
+        </div>
+      )}
+
+      {!loading && (
+        <div style={{ display: "grid", gap: 12 }}>
+          {trips.map((trip) => {
+            const driverName = getName(trip.designated_driver_id || trip.driver_id);
+            const tripStops = stops.filter((s) => s.trip_id === trip.id);
+            const tripPauses = pauseEvents.filter((p) => p.metadata?.trip_id === trip.id);
+            const activeStop = mode === "live" ? tripStops.find((s) => !s.ended_at) : null;
+            const elapsed = trip.actual_start
+              ? Math.round(((trip.actual_end ? new Date(trip.actual_end) : Date.now()) - new Date(trip.actual_start).getTime()) / 60000)
+              : 0;
 
         return (
           <div key={trip.id} style={{
@@ -2559,6 +2665,19 @@ function WebTripLogs({ drivers }) {
                 <div style={{ fontSize: 9, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5 }}>ELAPSED</div>
               </div>
             </div>
+
+            {mode === "history" && trip.speed_data && trip.speed_data.top_speed > 0 && (
+              <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: "var(--muted)" }}>
+                <span>⚡ {trip.speed_data.top_speed} mph <span style={{ color: "#555" }}>top</span></span>
+                <span>{trip.speed_data.avg_speed} mph <span style={{ color: "#555" }}>avg</span></span>
+                {trip.speed_data.seconds_over_80 > 0 && (
+                  <span style={{ color: "var(--accent)", fontWeight: 700 }}>{Math.round(trip.speed_data.seconds_over_80 / 60)}m &gt;80</span>
+                )}
+                {trip.speed_data.seconds_over_90 > 0 && (
+                  <span style={{ color: "var(--danger)", fontWeight: 700 }}>{Math.round(trip.speed_data.seconds_over_90 / 60)}m &gt;90</span>
+                )}
+              </div>
+            )}
 
             {activeStop && (
               <div style={{
@@ -2598,7 +2717,7 @@ function WebTripLogs({ drivers }) {
                 ))}
               </div>
             ) : (
-              {!tripPauses.length && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>No stops or pauses recorded</div>}
+              !tripPauses.length ? <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>No stops or pauses recorded</div> : null
             )}
 
             {tripPauses.length > 0 && (
@@ -2621,7 +2740,9 @@ function WebTripLogs({ drivers }) {
             )}
           </div>
         );
-      })}
+          })}
+        </div>
+      )}
     </div>
   );
 }
