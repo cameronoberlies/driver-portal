@@ -2496,6 +2496,7 @@ async function webReverseGeocode(lat, lon) {
 function WebTripLogs({ drivers }) {
   const [trips, setTrips] = useState([]);
   const [stops, setStops] = useState([]);
+  const [pauseEvents, setPauseEvents] = useState([]);
   const [stopLocations, setStopLocations] = useState({});
   const [loading, setLoading] = useState(true);
 
@@ -2506,12 +2507,14 @@ function WebTripLogs({ drivers }) {
   }, []);
 
   async function loadLogs() {
-    const [{ data: activeTrips }, { data: allStops }] = await Promise.all([
+    const [{ data: activeTrips }, { data: allStops }, { data: pauses }] = await Promise.all([
       supabase.from("trips").select("*").in("status", ["in_progress"]),
       supabase.from("trip_stops").select("*").order("started_at", { ascending: false }).limit(50),
+      supabase.from("system_logs").select("*").in("event", ["trip_paused", "trip_resumed"]).order("created_at", { ascending: false }).limit(50),
     ]);
     setTrips(activeTrips ?? []);
     setStops(allStops ?? []);
+    setPauseEvents(pauses ?? []);
     setLoading(false);
     for (const stop of (allStops ?? [])) {
       if (stop.latitude && stop.longitude && !stopLocations[stop.id]) {
@@ -2534,6 +2537,7 @@ function WebTripLogs({ drivers }) {
       {trips.map((trip) => {
         const driverName = getName(trip.designated_driver_id || trip.driver_id);
         const tripStops = stops.filter((s) => s.trip_id === trip.id);
+        const tripPauses = pauseEvents.filter((p) => p.metadata?.trip_id === trip.id);
         const activeStop = tripStops.find((s) => !s.ended_at);
         const elapsed = trip.actual_start ? Math.round((Date.now() - new Date(trip.actual_start).getTime()) / 60000) : 0;
 
@@ -2594,7 +2598,26 @@ function WebTripLogs({ drivers }) {
                 ))}
               </div>
             ) : (
-              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>No stops recorded</div>
+              {!tripPauses.length && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>No stops or pauses recorded</div>}
+            )}
+
+            {tripPauses.length > 0 && (
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 8 }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "var(--muted)", letterSpacing: 2, marginBottom: 4 }}>
+                  PAUSES ({tripPauses.length})
+                </div>
+                {tripPauses.map((p) => (
+                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 12 }}>
+                    <span style={{ color: "var(--muted)" }}>
+                      {p.event === "trip_paused" ? "⏸" : "▶"}{" "}
+                      {new Date(p.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET
+                    </span>
+                    <span style={{ fontWeight: 700, color: p.event === "trip_paused" ? "var(--accent)" : "var(--success)" }}>
+                      {p.event === "trip_paused" ? "PAUSED" : "RESUMED"}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         );
