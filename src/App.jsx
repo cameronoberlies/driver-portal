@@ -2108,7 +2108,7 @@ function LiveDriversMap({ drivers }) {
     ).addTo(map);
     // Dealership geofence boundary (Discovery Automotive - Shelby, NC)
     window.L.circle([35.270366805900295, -81.49624707303701], {
-      radius: 150,
+      radius: 300,
       color: "#f5a623",
       fillColor: "#f5a623",
       fillOpacity: 0.08,
@@ -2117,7 +2117,7 @@ function LiveDriversMap({ drivers }) {
     }).addTo(map).bindPopup(
       `<div style="font-family: 'Barlow Condensed', sans-serif; background: #161a20; color: #e8ecf0;">
         <div style="font-size: 14px; font-weight: 800; letter-spacing: 1px;">DEALERSHIP</div>
-        <div style="font-size: 11px; color: #6b7585;">150m geofence radius</div>
+        <div style="font-size: 11px; color: #6b7585;">300m geofence radius</div>
       </div>`
     );
 
