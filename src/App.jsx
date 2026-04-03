@@ -4176,6 +4176,25 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
       return;
     }
     onCreated(data);
+
+    // Notify assigned drivers
+    const driverIds = [form.driver_id, form.second_driver_id].filter(Boolean);
+    if (driverIds.length > 0) {
+      fetch("https://yincjogkjvotupzgetqg.supabase.co/functions/v1/notify-trip-assigned", {
+        method: "POST",
+        headers: {
+          apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          trip_id: data.id,
+          driver_ids: driverIds,
+          city: form.city,
+          scheduled_pickup: form.scheduled_pickup ? new Date(form.scheduled_pickup).toISOString() : null,
+        }),
+      }).catch(() => {});
+    }
+
     setSaved(true);
     setForm((f) => ({
       ...f,
