@@ -5878,7 +5878,14 @@ function AdminAvailability({ drivers }) {
                                 marginTop: 2,
                               }}
                             >
-                              {rec[`${d}_done_by`].slice(0, 5)}
+                              {(() => {
+                                const t = rec[`${d}_done_by`];
+                                if (!t) return '';
+                                const [h, m] = t.split(':').map(Number);
+                                const ampm = h >= 12 ? 'PM' : 'AM';
+                                const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+                                return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+                              })()}
                             </div>
                           )}
                         </div>
