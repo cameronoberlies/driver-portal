@@ -4860,18 +4860,24 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
         <div className="form-grid">
           <div className="field">
             <label>Type</label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {["fly", "drive", "aa", "courier"].map((t) => (
-                <button
-                  key={t}
-                  className={`btn ${tripType === t ? "btn-primary" : "btn-ghost"}`}
-                  style={{ flex: 1, fontSize: 12 }}
-                  onClick={() => setTripType(t)}
-                >
-                  {tripTypeLabel(t)}
-                </button>
-              ))}
-            </div>
+            {trip.group_id || trip.parent_trip_id ? (
+              <div style={{ padding: "6px 0", fontSize: 13, color: "var(--muted)" }}>
+                {tripTypeLabel(tripType)} <span style={{ fontSize: 11 }}>(locked)</span>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {["fly", "drive", "aa", "courier"].map((t) => (
+                  <button
+                    key={t}
+                    className={`btn ${tripType === t ? "btn-primary" : "btn-ghost"}`}
+                    style={{ flex: 1, fontSize: 12 }}
+                    onClick={() => setTripType(t)}
+                  >
+                    {tripTypeLabel(t)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="field">
             <label>City</label>
@@ -5849,43 +5855,44 @@ function AdminTrips({
                           <td style={{ fontWeight: 600 }}>
                             <span style={{ color: "var(--accent)", marginRight: 6 }}>{expanded ? "▼" : "▶"}</span>
                             {label} <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 12 }}>({groupTrips.length} drivers)</span>
+                            {/* Stock numbers inline-editable under group name */}
+                            <div style={{ marginTop: 2, fontSize: 11, fontWeight: 400 }} onClick={(e) => e.stopPropagation()}>
+                              {editingStockNumbers === group_id ? (
+                                <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                                  <input
+                                    type="text"
+                                    value={stockNumberDraft}
+                                    onChange={(e) => setStockNumberDraft(e.target.value)}
+                                    style={{ fontSize: 11, padding: "2px 6px", width: 180 }}
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") handleSaveStockNumbers(group_id, stockNumberDraft);
+                                      if (e.key === "Escape") setEditingStockNumbers(null);
+                                    }}
+                                  />
+                                  <button className="btn-edit" style={{ fontSize: 10, padding: "2px 6px" }} onClick={() => handleSaveStockNumbers(group_id, stockNumberDraft)}>Save</button>
+                                </span>
+                              ) : (
+                                <span
+                                  onClick={() => {
+                                    setEditingStockNumbers(group_id);
+                                    setStockNumberDraft(groupTrips[0]?.stock_numbers || "");
+                                  }}
+                                  style={{ cursor: "pointer", color: "var(--muted)", borderBottom: "1px dashed var(--border)" }}
+                                  title="Click to edit stock numbers"
+                                >
+                                  {groupTrips[0]?.stock_numbers ? `Stock: ${groupTrips[0].stock_numbers}` : "+ Add stock numbers"}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--muted)" }}>{groupTrips[0]?.crm_id}</td>
                           <td>{groupTrips[0]?.city}</td>
                           <td style={{ color: "var(--muted)", fontSize: 12 }}>
                             {new Date(groupTrips[0].scheduled_pickup).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </td>
-                          <td colSpan="2" style={{ fontSize: 12, color: "var(--muted)" }}>
-                            {/* Stock numbers inline */}
-                            {editingStockNumbers === group_id ? (
-                              <span onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 4 }}>
-                                <input
-                                  type="text"
-                                  value={stockNumberDraft}
-                                  onChange={(e) => setStockNumberDraft(e.target.value)}
-                                  style={{ fontSize: 12, padding: "2px 6px", width: 140 }}
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleSaveStockNumbers(group_id, stockNumberDraft);
-                                    if (e.key === "Escape") setEditingStockNumbers(null);
-                                  }}
-                                />
-                                <button className="btn-edit" style={{ fontSize: 10, padding: "2px 6px" }} onClick={() => handleSaveStockNumbers(group_id, stockNumberDraft)}>Save</button>
-                              </span>
-                            ) : (
-                              <span
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingStockNumbers(group_id);
-                                  setStockNumberDraft(groupTrips[0]?.stock_numbers || "");
-                                }}
-                                style={{ cursor: "pointer", borderBottom: "1px dashed var(--muted)" }}
-                                title="Click to edit stock numbers"
-                              >
-                                {groupTrips[0]?.stock_numbers || "No stock #s — click to add"}
-                              </span>
-                            )}
-                          </td>
+                          <td style={{ color: "var(--muted)", fontSize: 12 }}>—</td>
+                          <td style={{ color: "var(--muted)", fontSize: 12 }}>—</td>
                           <td style={{ whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
                             {isAdmin && anyCompleted && !allFinalized && (
                               <button
@@ -5919,6 +5926,25 @@ function AdminTrips({
                               {trip.actual_end ? new Date(trip.actual_end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}
                             </td>
                             <td style={{ whiteSpace: "nowrap" }}>
+                              {isAdmin && trip.status === "pending" && (
+                                <>
+                                  <button
+                                    className="btn-edit"
+                                    style={{ background: "rgba(245,166,35,0.1)", color: "var(--accent)", borderColor: "var(--accent)" }}
+                                    onClick={() => setEditingTrip({ ...trip })}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    className="btn-edit"
+                                    style={{ background: "rgba(232,90,74,0.1)", color: "var(--danger)", borderColor: "var(--danger)" }}
+                                    onClick={() => handleDeleteTrip(trip)}
+                                    disabled={acting === trip.id}
+                                  >
+                                    {acting === trip.id ? "..." : "Delete"}
+                                  </button>
+                                </>
+                              )}
                               {isAdmin && trip.status === "in_progress" && (
                                 <button
                                   className="btn-edit"
