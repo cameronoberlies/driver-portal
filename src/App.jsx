@@ -1266,7 +1266,7 @@ function DriverDashboard({ driver, entries, trips, setTrips, tab, setTab }) {
       )}
 
       {tab === "my trips" && (
-        <DriverTrips driver={driver} trips={trips} setTrips={setTrips} />
+        <DriverTrips driver={driver} trips={trips} setTrips={setTrips} allProfiles={profiles} />
       )}
 
       {tab === "availability" && <DriverAvailability driver={driver} />}
@@ -6101,13 +6101,31 @@ function AdminTrips({
 }
 
 // ─── DRIVER TRIPS ─────────────────────────────────────────────────────────────
-function DriverTrips({ driver, trips, setTrips }) {
+function DriverTrips({ driver, trips, setTrips, allProfiles }) {
   const [acting, setActing] = useState(null); // trip id being acted on
 
   const isDesignated = (trip) => trip.designated_driver_id === driver.id;
   const myTrips = trips.filter(
     (t) => t.driver_id === driver.id || t.second_driver_id === driver.id,
   );
+
+  function getLinkedInfo(trip) {
+    if (trip.trip_type === "airport" && trip.parent_trip_id) {
+      const parent = trips.find((t) => t.id === trip.parent_trip_id);
+      if (parent) {
+        const p = allProfiles?.find((pr) => pr.id === parent.driver_id);
+        return p ? `Driving to airport: ${p.name}` : null;
+      }
+    }
+    if (trip.trip_type === "fly") {
+      const airportTrip = trips.find((t) => t.parent_trip_id === trip.id && t.trip_type === "airport");
+      if (airportTrip) {
+        const p = allProfiles?.find((pr) => pr.id === airportTrip.driver_id);
+        return p ? `Airport driver: ${p.name}` : null;
+      }
+    }
+    return null;
+  }
   const pending = myTrips.filter((t) => t.status === "pending");
   const inProgress = myTrips.filter((t) => t.status === "in_progress");
   const recent = myTrips
@@ -6209,6 +6227,11 @@ function DriverTrips({ driver, trips, setTrips }) {
                 style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}
               >
                 📝 {trip.notes}
+              </div>
+            )}
+            {getLinkedInfo(trip) && (
+              <div style={{ fontSize: 12, color: "var(--accent)", marginTop: 4, fontWeight: 600 }}>
+                {getLinkedInfo(trip)}
               </div>
             )}
             {isActive && trip.actual_start && (
