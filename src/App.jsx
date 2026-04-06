@@ -4522,7 +4522,9 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
         .insert(airportPayload)
         .select()
         .single();
-      if (!airportErr && airportData) {
+      if (airportErr) {
+        setError("Trip created but airport driver failed: " + airportErr.message);
+      } else if (airportData) {
         onCreated(airportData);
       }
     }
@@ -4803,6 +4805,7 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
     const mi = String(d.getMinutes()).padStart(2, "0");
     return `${y}-${mo}-${da}T${h}:${mi}`;
   });
+  const [stockNumbers, setStockNumbers] = useState(trip.stock_numbers || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const drivers = allProfiles.filter((p) => p.role === "driver");
@@ -4825,6 +4828,7 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
         designated_driver_id: driverId,
         second_driver_id: secondDriverId || null,
         scheduled_pickup: pickup ? new Date(pickup).toISOString() : trip.scheduled_pickup,
+        stock_numbers: stockNumbers || null,
       })
       .eq("id", trip.id)
       .select()
@@ -4833,6 +4837,14 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
     if (err) {
       setError(err.message);
       return;
+    }
+    // If AA trip with group, sync stock numbers across the group
+    if (tripType === "aa" && trip.group_id && stockNumbers !== trip.stock_numbers) {
+      await supabase
+        .from("trips")
+        .update({ stock_numbers: stockNumbers || null })
+        .eq("group_id", trip.group_id)
+        .neq("id", trip.id);
     }
     onSaved(data);
   }
@@ -4913,6 +4925,16 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
               placeholder="Flight info, seller contact, etc."
             />
           </div>
+          {tripType === "aa" && (
+            <div className="field" style={{ gridColumn: "1 / -1" }}>
+              <label>Stock Numbers</label>
+              <input
+                value={stockNumbers}
+                onChange={(e) => setStockNumbers(e.target.value)}
+                placeholder="A123, B456, C789"
+              />
+            </div>
+          )}
         </div>
 
         {error && <div className="error-msg">{error}</div>}
@@ -5344,7 +5366,6 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
   const [stockNumbers, setStockNumbers] = useState(groupTrips[0]?.stock_numbers || "");
   const [fuelCost, setFuelCost] = useState("");
   const [otherCost, setOtherCost] = useState("");
-  const [estimatedCost, setEstimatedCost] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -5376,7 +5397,7 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
         hours: df.hours ? Number(df.hours) : 0,
         stock_numbers: stockNumbers || null,
         actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
-        estimated_cost: estimatedCost ? Number(estimatedCost) : 0,
+        estimated_cost: 0,
         ...costFields,
       })
       .eq("id", df.tripId);
@@ -5394,7 +5415,7 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
       crm_id: trip.crm_id,
       carpage_link: trip.carpage_link,
       actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
-      estimated_cost: estimatedCost ? Number(estimatedCost) : 0,
+      estimated_cost: 0,
       trip_type: "aa",
       stock_numbers: stockNumbers || null,
       ...costFields,
@@ -5432,7 +5453,7 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
           hours: df.hours ? Number(df.hours) : 0,
           stock_numbers: stockNumbers || null,
           actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
-          estimated_cost: estimatedCost ? Number(estimatedCost) : 0,
+          estimated_cost: 0,
           ...costFields,
         })
         .eq("id", df.tripId);
@@ -5450,7 +5471,7 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
         crm_id: trip.crm_id,
         carpage_link: trip.carpage_link,
         actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
-        estimated_cost: estimatedCost ? Number(estimatedCost) : 0,
+        estimated_cost: 0,
         trip_type: "aa",
         stock_numbers: stockNumbers || null,
         ...costFields,
@@ -5566,10 +5587,6 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
             <div className="field">
               <label>Other Expenses ($)</label>
               <input type="number" placeholder="0.00" value={otherCost} onChange={(e) => setOtherCost(e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Estimated Cost ($)</label>
-              <input type="number" placeholder="0.00" value={estimatedCost} onChange={(e) => setEstimatedCost(e.target.value)} />
             </div>
           </div>
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 }}>
