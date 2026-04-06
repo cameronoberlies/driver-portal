@@ -12,6 +12,8 @@ import {
   buildCSVContent,
   validateTripForm,
   buildTripPayload,
+  tripTypeLabel,
+  aaGroupLabel,
   parseCarpageCity,
   buildCarpageNotes,
   parseCarpagePickup,
@@ -3511,11 +3513,16 @@ function AdminDashboard({
     pay: "",
     hours: "",
     miles: "",
-    actual_cost: "",
     estimated_cost: "",
+    flight_cost: "",
+    rideshare_cost: "",
+    fuel_cost: "",
+    other_cost: "",
     city: "",
     crm_id: "",
     carpage_link: "",
+    trip_type: "",
+    stock_numbers: "",
     recon_missed: false,
   });
 
@@ -3525,9 +3532,20 @@ function AdminDashboard({
     }
   }, [drivers.length]);
 
+  // Compute actual cost from itemized fields + driver pay for log entry
+  const logActualCost = [
+    form.flight_cost, form.rideshare_cost, form.fuel_cost, form.other_cost, form.pay,
+  ].reduce((sum, v) => sum + (Number(v) || 0), 0);
+
   async function handleSubmit() {
     if (!form.driver_id || !form.date || !form.pay) return;
     setSubmitting(true);
+    const costFields = {
+      flight_cost: form.flight_cost ? Number(form.flight_cost) : null,
+      rideshare_cost: form.rideshare_cost ? Number(form.rideshare_cost) : null,
+      fuel_cost: form.fuel_cost ? Number(form.fuel_cost) : null,
+      other_cost: form.other_cost ? Number(form.other_cost) : null,
+    };
     const { data, error } = await supabase
       .from("entries")
       .insert({
@@ -3536,12 +3554,15 @@ function AdminDashboard({
         pay: Number(form.pay),
         hours: Number(form.hours),
         miles: form.miles ? Number(form.miles) : 0,
-        actual_cost: form.actual_cost ? Number(form.actual_cost) : 0,
+        actual_cost: logActualCost,
         estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
         city: form.city,
         crm_id: form.crm_id,
         carpage_link: form.carpage_link || null,
+        trip_type: form.trip_type || null,
+        stock_numbers: form.stock_numbers || null,
         recon_missed: form.recon_missed,
+        ...costFields,
       })
       .select()
       .single();
@@ -3552,11 +3573,16 @@ function AdminDashboard({
         pay: "",
         hours: "",
         miles: "",
-        actual_cost: "",
         estimated_cost: "",
+        flight_cost: "",
+        rideshare_cost: "",
+        fuel_cost: "",
+        other_cost: "",
         city: "",
         crm_id: "",
         carpage_link: "",
+        trip_type: "",
+        stock_numbers: "",
         recon_missed: false,
       }));
       setSaved(true);
@@ -3795,26 +3821,20 @@ function AdminDashboard({
                   />
                 </div>
                 <div className="field">
-                  <label>Actual Cost ($)</label>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    value={form.actual_cost}
+                  <label>Trip Type</label>
+                  <select
+                    value={form.trip_type}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, actual_cost: e.target.value }))
+                      setForm((f) => ({ ...f, trip_type: e.target.value }))
                     }
-                  />
-                </div>
-                <div className="field">
-                  <label>Estimated Cost ($)</label>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    value={form.estimated_cost}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, estimated_cost: e.target.value }))
-                    }
-                  />
+                  >
+                    <option value="">— None —</option>
+                    <option value="fly">✈ Fly</option>
+                    <option value="drive">🚗 Drive</option>
+                    <option value="aa">🚐 AA</option>
+                    <option value="courier">📦 Courier</option>
+                    <option value="airport">🛫 Airport</option>
+                  </select>
                 </div>
                 <div className="field">
                   <label>City</label>
@@ -3838,6 +3858,30 @@ function AdminDashboard({
                     }
                   />
                 </div>
+                <div className="field">
+                  <label>Estimated Cost ($)</label>
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    value={form.estimated_cost}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, estimated_cost: e.target.value }))
+                    }
+                  />
+                </div>
+                {form.trip_type === "aa" && (
+                  <div className="field">
+                    <label>Stock Numbers</label>
+                    <input
+                      type="text"
+                      placeholder="A123, B456, C789"
+                      value={form.stock_numbers}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, stock_numbers: e.target.value }))
+                      }
+                    />
+                  </div>
+                )}
                 <div className="field" style={{ gridColumn: "1 / -1" }}>
                   <label>Carpage Link</label>
                   <input
@@ -3848,6 +3892,81 @@ function AdminDashboard({
                       setForm((f) => ({ ...f, carpage_link: e.target.value }))
                     }
                   />
+                </div>
+              </div>
+
+              {/* ── Itemized Cost Breakdown ── */}
+              <div style={{
+                marginTop: 12,
+                padding: "12px 14px",
+                background: "var(--bg)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 10 }}>
+                  COST BREAKDOWN
+                </div>
+                <div className="form-grid">
+                  {(form.trip_type === "fly" || form.trip_type === "airport") && (
+                    <>
+                      <div className="field">
+                        <label>Flight Ticket ($)</label>
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          value={form.flight_cost}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, flight_cost: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Rideshare ($)</label>
+                        <input
+                          type="number"
+                          placeholder="0.00"
+                          value={form.rideshare_cost}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, rideshare_cost: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div className="field">
+                    <label>Fuel ($)</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      value={form.fuel_cost}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, fuel_cost: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Other Expenses ($)</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      value={form.other_cost}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, other_cost: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div style={{
+                  marginTop: 10,
+                  paddingTop: 10,
+                  borderTop: "1px solid var(--border)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: 13,
+                  fontWeight: 700,
+                }}>
+                  <span style={{ color: "var(--muted)" }}>Total Actual Cost</span>
+                  <span style={{ color: "var(--text)" }}>${logActualCost.toFixed(2)}</span>
                 </div>
               </div>
               <div className="checkbox-row">
@@ -4212,12 +4331,15 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
     driver_id: drivers[0]?.id || "",
     second_driver_id: "",
     designated_driver_id: "",
+    airport_driver_id: "",
     trip_type: "fly",
     city: "",
     crm_id: "",
     carpage_link: "",
     scheduled_pickup: now.toISOString().slice(0, 16),
     notes: "",
+    stock_numbers: "",
+    aa_driver_ids: [],
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -4308,21 +4430,108 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
     }
     setSaving(true);
     setError("");
+
+    // ── AA trip: create one trip per driver, linked by group_id ──
+    if (form.trip_type === "aa") {
+      const groupId = crypto.randomUUID();
+      const payloads = form.aa_driver_ids.map((driverId) => ({
+        driver_id: driverId,
+        designated_driver_id: driverId,
+        trip_type: "aa",
+        city: form.city,
+        crm_id: form.crm_id,
+        carpage_link: form.carpage_link || null,
+        scheduled_pickup: new Date(form.scheduled_pickup).toISOString(),
+        notes: form.notes || null,
+        status: "pending",
+        group_id: groupId,
+        stock_numbers: form.stock_numbers || null,
+      }));
+
+      const { data, error: err } = await supabase
+        .from("trips")
+        .insert(payloads)
+        .select();
+      setSaving(false);
+      if (err) {
+        setError(err.message);
+        return;
+      }
+      data.forEach((t) => onCreated(t));
+
+      const driverIds = form.aa_driver_ids;
+      if (driverIds.length > 0) {
+        fetch("https://yincjogkjvotupzgetqg.supabase.co/functions/v1/notify-trip-assigned", {
+          method: "POST",
+          headers: {
+            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            trip_id: data[0].id,
+            driver_ids: driverIds,
+            city: form.city,
+            scheduled_pickup: form.scheduled_pickup ? new Date(form.scheduled_pickup).toISOString() : null,
+          }),
+        }).catch(() => {});
+      }
+
+      setSaved(true);
+      setForm((f) => ({
+        ...f,
+        city: "",
+        crm_id: "",
+        carpage_link: "",
+        notes: "",
+        stock_numbers: "",
+        aa_driver_ids: [],
+      }));
+      setTimeout(() => setSaved(false), 3000);
+      return;
+    }
+
+    // ── Standard trip (fly, drive, courier) ──
     const payload = buildTripPayload(form);
     const { data, error: err } = await supabase
       .from("trips")
       .insert(payload)
       .select()
       .single();
-    setSaving(false);
     if (err) {
+      setSaving(false);
       setError(err.message);
       return;
     }
+
+    // ── Airport driver: create linked trip for fly trips ──
+    if (form.trip_type === "fly" && form.airport_driver_id) {
+      const airportPayload = {
+        driver_id: form.airport_driver_id,
+        designated_driver_id: form.airport_driver_id,
+        trip_type: "airport",
+        city: form.city,
+        crm_id: form.crm_id,
+        carpage_link: form.carpage_link || null,
+        scheduled_pickup: new Date(form.scheduled_pickup).toISOString(),
+        notes: `Airport driver for ${form.city}`,
+        status: "pending",
+        parent_trip_id: data.id,
+      };
+      const { data: airportData, error: airportErr } = await supabase
+        .from("trips")
+        .insert(airportPayload)
+        .select()
+        .single();
+      if (!airportErr && airportData) {
+        onCreated(airportData);
+      }
+    }
+
+    setSaving(false);
     onCreated(data);
 
     // Notify assigned drivers
-    const driverIds = [form.driver_id, form.second_driver_id].filter(Boolean);
+    const driverIds = [form.driver_id, form.second_driver_id, form.airport_driver_id].filter(Boolean);
     if (driverIds.length > 0) {
       fetch("https://yincjogkjvotupzgetqg.supabase.co/functions/v1/notify-trip-assigned", {
         method: "POST",
@@ -4348,6 +4557,9 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
       notes: "",
       second_driver_id: "",
       designated_driver_id: "",
+      airport_driver_id: "",
+      stock_numbers: "",
+      aa_driver_ids: [],
     }));
     setTimeout(() => setSaved(false), 3000);
   }
@@ -4387,6 +4599,8 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
           >
             <option value="fly">✈ Fly</option>
             <option value="drive">🚗 Drive</option>
+            <option value="aa">🚐 AA (Convoy)</option>
+            <option value="courier">📦 Courier</option>
           </select>
         </div>
         <div className="field">
@@ -4397,23 +4611,62 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
             onChange={(e) => set("scheduled_pickup", e.target.value)}
           />
         </div>
-        <div className="field">
-          <label>
-            {form.trip_type === "drive"
-              ? "Driver 1 (Chase Car)"
-              : "Assigned Driver"}
-          </label>
-          <select
-            value={form.driver_id}
-            onChange={(e) => set("driver_id", e.target.value)}
-          >
-            {drivers.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}{d.willing_to_fly ? ' (F)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* ── AA: multi-driver selection ── */}
+        {form.trip_type === "aa" && (
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label>Drivers in Convoy (select multiple)</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+              {drivers.map((d) => {
+                const selected = form.aa_driver_ids.includes(d.id);
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    className={`btn ${selected ? "btn-primary" : "btn-ghost"}`}
+                    style={{ fontSize: 12, padding: "4px 12px" }}
+                    onClick={() => {
+                      if (selected) {
+                        set("aa_driver_ids", form.aa_driver_ids.filter((id) => id !== d.id));
+                      } else {
+                        set("aa_driver_ids", [...form.aa_driver_ids, d.id]);
+                      }
+                    }}
+                  >
+                    {d.name}{d.willing_to_fly ? " (F)" : ""}
+                  </button>
+                );
+              })}
+            </div>
+            {form.aa_driver_ids.length > 0 && (
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                {form.aa_driver_ids.length} driver{form.aa_driver_ids.length !== 1 ? "s" : ""} selected — each gets their own trip record
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Single driver for fly, drive, courier ── */}
+        {form.trip_type !== "aa" && (
+          <div className="field">
+            <label>
+              {form.trip_type === "drive"
+                ? "Driver 1 (Chase Car)"
+                : "Assigned Driver"}
+            </label>
+            <select
+              value={form.driver_id}
+              onChange={(e) => set("driver_id", e.target.value)}
+            >
+              {drivers.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}{d.willing_to_fly ? ' (F)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* ── Drive: second driver ── */}
         {form.trip_type === "drive" && (
           <div className="field">
             <label>Driver 2 (Drives Vehicle Back)</label>
@@ -4446,6 +4699,39 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
                 {(() => { const d = drivers.find((d) => d.id === form.second_driver_id); return d ? `${d.name}${d.willing_to_fly ? ' (F)' : ''}` : ''; })()}
               </option>
             </select>
+          </div>
+        )}
+
+        {/* ── Fly: optional airport driver ── */}
+        {form.trip_type === "fly" && (
+          <div className="field">
+            <label>Airport Driver (optional, $45 suggested)</label>
+            <select
+              value={form.airport_driver_id}
+              onChange={(e) => set("airport_driver_id", e.target.value)}
+            >
+              <option value="">— None —</option>
+              {drivers
+                .filter((d) => d.id !== form.driver_id)
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}{d.willing_to_fly ? ' (F)' : ''}
+                  </option>
+                ))}
+            </select>
+          </div>
+        )}
+
+        {/* ── AA: stock numbers ── */}
+        {form.trip_type === "aa" && (
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label>Stock Numbers</label>
+            <input
+              type="text"
+              placeholder="A123, B456, C789"
+              value={form.stock_numbers}
+              onChange={(e) => set("stock_numbers", e.target.value)}
+            />
           </div>
         )}
         <div className="field">
@@ -4562,15 +4848,15 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
         <div className="form-grid">
           <div className="field">
             <label>Type</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              {["fly", "drive"].map((t) => (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {["fly", "drive", "aa", "courier"].map((t) => (
                 <button
                   key={t}
                   className={`btn ${tripType === t ? "btn-primary" : "btn-ghost"}`}
                   style={{ flex: 1, fontSize: 12 }}
                   onClick={() => setTripType(t)}
                 >
-                  {t === "fly" ? "✈ Fly" : "🚗 Drive"}
+                  {tripTypeLabel(t)}
                 </button>
               ))}
             </div>
@@ -4662,13 +4948,21 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
           3600000
         ).toFixed(1)
       : "";
+
+  // $45 suggested pay for AA, Courier, and Airport trips
+  const suggestedPay = ["aa", "courier", "airport"].includes(trip.trip_type) ? "45" : "";
+
   const [form, setForm] = useState({
-    pay: "",
+    pay: suggestedPay,
     pay2: "",
     hours: duration,
     miles: String(trip.miles ?? ""),
-    actual_cost: String(trip.actual_cost ?? ""),
     estimated_cost: String(trip.estimated_cost ?? ""),
+    flight_cost: String(trip.flight_cost ?? ""),
+    rideshare_cost: String(trip.rideshare_cost ?? ""),
+    fuel_cost: String(trip.fuel_cost ?? ""),
+    other_cost: String(trip.other_cost ?? ""),
+    stock_numbers: trip.stock_numbers ?? "",
     recon_missed: false,
   });
   const [saving, setSaving] = useState(false);
@@ -4676,6 +4970,12 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
   function set(k, v) {
     setForm((f) => ({ ...f, [k]: v }));
   }
+
+  // Compute actual cost from itemized fields + driver pay
+  const computedActualCost = [
+    form.flight_cost, form.rideshare_cost, form.fuel_cost, form.other_cost,
+    form.pay, form.pay2,
+  ].reduce((sum, v) => sum + (Number(v) || 0), 0);
 
   async function handleFinalize() {
     if (!form.pay) {
@@ -4689,14 +4989,23 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
     setSaving(true);
     setError("");
 
+    const costFields = {
+      flight_cost: form.flight_cost ? Number(form.flight_cost) : null,
+      rideshare_cost: form.rideshare_cost ? Number(form.rideshare_cost) : null,
+      fuel_cost: form.fuel_cost ? Number(form.fuel_cost) : null,
+      other_cost: form.other_cost ? Number(form.other_cost) : null,
+    };
+
     // Update trip to finalized
     const { error: tripErr } = await supabase
       .from("trips")
       .update({
         status: "finalized",
         miles: form.miles ? Number(form.miles) : 0,
-        actual_cost: form.actual_cost ? Number(form.actual_cost) : 0,
+        actual_cost: computedActualCost,
         estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
+        stock_numbers: form.stock_numbers || null,
+        ...costFields,
       })
       .eq("id", trip.id);
     if (tripErr) {
@@ -4715,10 +5024,13 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
       carpage_link: trip.carpage_link,
       hours: form.hours ? Number(form.hours) : 0,
       miles: form.miles ? Number(form.miles) : 0,
-      actual_cost: form.actual_cost ? Number(form.actual_cost) : 0,
+      actual_cost: computedActualCost,
       estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
       recon_missed: form.recon_missed,
       trip_id: trip.id,
+      trip_type: trip.trip_type,
+      stock_numbers: form.stock_numbers || null,
+      ...costFields,
     };
     await supabase.from("entries").insert({
       ...baseEntry,
@@ -4762,7 +5074,7 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
           <div style={{ color: "var(--muted)", fontSize: 12 }}>
             {driver1?.name}
             {driver2 ? ` + ${driver2.name}` : ""} ·{" "}
-            {trip.trip_type === "fly" ? "✈ Fly" : "🚗 Drive"}
+            {tripTypeLabel(trip.trip_type)}
             {trip.actual_start && trip.actual_end && (
               <span style={{ marginLeft: 12 }}>⏱ {duration}h recorded</span>
             )}
@@ -4868,15 +5180,6 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
             />
           </div>
           <div className="field">
-            <label>Actual Cost ($)</label>
-            <input
-              type="number"
-              placeholder="0.00"
-              value={form.actual_cost}
-              onChange={(e) => set("actual_cost", e.target.value)}
-            />
-          </div>
-          <div className="field">
             <label>Estimated Cost ($)</label>
             <input
               type="number"
@@ -4886,6 +5189,102 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
             />
           </div>
         </div>
+
+        {/* ── Itemized Cost Breakdown ── */}
+        <div style={{
+          marginTop: 12,
+          padding: "12px 14px",
+          background: "var(--bg)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)",
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 10 }}>
+            COST BREAKDOWN
+          </div>
+          <div className="form-grid">
+            {(trip.trip_type === "fly" || trip.trip_type === "airport") && (
+              <>
+                <div className="field">
+                  <label>Flight Ticket ($)</label>
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    value={form.flight_cost}
+                    onChange={(e) => set("flight_cost", e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label>Rideshare ($)</label>
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    value={form.rideshare_cost}
+                    onChange={(e) => set("rideshare_cost", e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+            <div className="field">
+              <label>Fuel ($)</label>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={form.fuel_cost}
+                onChange={(e) => set("fuel_cost", e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>Other Expenses ($)</label>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={form.other_cost}
+                onChange={(e) => set("other_cost", e.target.value)}
+              />
+            </div>
+          </div>
+          <div style={{
+            marginTop: 10,
+            paddingTop: 10,
+            borderTop: "1px solid var(--border)",
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 13,
+            fontWeight: 700,
+          }}>
+            <span style={{ color: "var(--muted)" }}>Total Actual Cost</span>
+            <span style={{ color: "var(--text)" }}>${computedActualCost.toFixed(2)}</span>
+          </div>
+          {form.estimated_cost && (
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 12,
+              color: computedActualCost > Number(form.estimated_cost) ? "var(--danger)" : "var(--success, #4ade80)",
+              marginTop: 4,
+            }}>
+              <span>Variance</span>
+              <span>
+                {computedActualCost > Number(form.estimated_cost) ? "+" : ""}
+                ${(computedActualCost - Number(form.estimated_cost)).toFixed(2)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* ── Stock Numbers (editable for AA trips) ── */}
+        {trip.trip_type === "aa" && (
+          <div className="field" style={{ marginTop: 10 }}>
+            <label>Stock Numbers</label>
+            <input
+              type="text"
+              placeholder="A123, B456, C789"
+              value={form.stock_numbers ?? trip.stock_numbers ?? ""}
+              onChange={(e) => set("stock_numbers", e.target.value)}
+            />
+          </div>
+        )}
+
         <div className="checkbox-row">
           <input
             type="checkbox"
@@ -4929,6 +5328,276 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
   );
 }
 
+// ─── AA GROUP FINALIZE MODAL ─────────────────────────────────────────────────
+function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose }) {
+  const [driverForms, setDriverForms] = useState(() =>
+    groupTrips.map((trip) => ({
+      tripId: trip.id,
+      driverId: trip.driver_id,
+      pay: "45",
+      hours: trip.actual_start && trip.actual_end
+        ? ((new Date(trip.actual_end) - new Date(trip.actual_start)) / 3600000).toFixed(1)
+        : "",
+      miles: String(trip.miles ?? ""),
+    })),
+  );
+  const [stockNumbers, setStockNumbers] = useState(groupTrips[0]?.stock_numbers || "");
+  const [fuelCost, setFuelCost] = useState("");
+  const [otherCost, setOtherCost] = useState("");
+  const [estimatedCost, setEstimatedCost] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function setDriverField(idx, key, value) {
+    setDriverForms((prev) => prev.map((f, i) => (i === idx ? { ...f, [key]: value } : f)));
+  }
+
+  const totalPay = driverForms.reduce((s, f) => s + (Number(f.pay) || 0), 0);
+  const computedActualCost = totalPay + (Number(fuelCost) || 0) + (Number(otherCost) || 0);
+
+  async function handleFinalizeDriver(idx) {
+    const df = driverForms[idx];
+    if (!df.pay) { setError("Pay is required."); return; }
+    setSaving(true);
+    setError("");
+
+    const trip = groupTrips.find((t) => t.id === df.tripId);
+    const costFields = {
+      fuel_cost: fuelCost ? Number(fuelCost) : null,
+      other_cost: otherCost ? Number(otherCost) : null,
+    };
+
+    const { error: tripErr } = await supabase
+      .from("trips")
+      .update({
+        status: "finalized",
+        pay: Number(df.pay),
+        miles: df.miles ? Number(df.miles) : 0,
+        hours: df.hours ? Number(df.hours) : 0,
+        stock_numbers: stockNumbers || null,
+        actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
+        estimated_cost: estimatedCost ? Number(estimatedCost) : 0,
+        ...costFields,
+      })
+      .eq("id", df.tripId);
+
+    if (tripErr) { setError(tripErr.message); setSaving(false); return; }
+
+    await supabase.from("entries").insert({
+      driver_id: df.driverId,
+      trip_id: df.tripId,
+      date: (trip.actual_end ? new Date(trip.actual_end) : new Date()).toISOString().slice(0, 10),
+      pay: Number(df.pay),
+      hours: df.hours ? Number(df.hours) : 0,
+      miles: df.miles ? Number(df.miles) : 0,
+      city: trip.city,
+      crm_id: trip.crm_id,
+      carpage_link: trip.carpage_link,
+      actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
+      estimated_cost: estimatedCost ? Number(estimatedCost) : 0,
+      trip_type: "aa",
+      stock_numbers: stockNumbers || null,
+      ...costFields,
+    });
+
+    setSaving(false);
+    onFinalized(df.tripId);
+  }
+
+  async function handleFinalizeAll() {
+    const missing = driverForms.find((f) => !f.pay);
+    if (missing) {
+      const driver = allProfiles.find((p) => p.id === missing.driverId);
+      setError(`Pay is required for ${driver?.name || "all drivers"}.`);
+      return;
+    }
+    setSaving(true);
+    setError("");
+
+    const costFields = {
+      fuel_cost: fuelCost ? Number(fuelCost) : null,
+      other_cost: otherCost ? Number(otherCost) : null,
+    };
+
+    for (const df of driverForms) {
+      const trip = groupTrips.find((t) => t.id === df.tripId);
+      if (trip.status === "finalized") continue;
+
+      const { error: tripErr } = await supabase
+        .from("trips")
+        .update({
+          status: "finalized",
+          pay: Number(df.pay),
+          miles: df.miles ? Number(df.miles) : 0,
+          hours: df.hours ? Number(df.hours) : 0,
+          stock_numbers: stockNumbers || null,
+          actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
+          estimated_cost: estimatedCost ? Number(estimatedCost) : 0,
+          ...costFields,
+        })
+        .eq("id", df.tripId);
+
+      if (tripErr) { setError(tripErr.message); setSaving(false); return; }
+
+      await supabase.from("entries").insert({
+        driver_id: df.driverId,
+        trip_id: df.tripId,
+        date: (trip.actual_end ? new Date(trip.actual_end) : new Date()).toISOString().slice(0, 10),
+        pay: Number(df.pay),
+        hours: df.hours ? Number(df.hours) : 0,
+        miles: df.miles ? Number(df.miles) : 0,
+        city: trip.city,
+        crm_id: trip.crm_id,
+        carpage_link: trip.carpage_link,
+        actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
+        estimated_cost: estimatedCost ? Number(estimatedCost) : 0,
+        trip_type: "aa",
+        stock_numbers: stockNumbers || null,
+        ...costFields,
+      });
+    }
+
+    setSaving(false);
+    groupTrips.forEach((t) => onFinalized(t.id));
+  }
+
+  const label = aaGroupLabel(groupTrips[0]);
+  const allCompleted = groupTrips.every((t) => t.status === "completed" || t.status === "finalized");
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ width: 640, maxHeight: "85vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Finalize {label}</div>
+        <div style={{ marginBottom: 16, padding: "10px 14px", background: "var(--bg)", border: "1px solid var(--border)", fontSize: 13 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>
+            {label} — {groupTrips[0]?.city} · {groupTrips.length} driver{groupTrips.length !== 1 ? "s" : ""}
+          </div>
+        </div>
+
+        {/* Stock Numbers — editable */}
+        <div className="field" style={{ marginBottom: 16 }}>
+          <label>Stock Numbers (editable)</label>
+          <input
+            type="text"
+            placeholder="A123, B456, C789"
+            value={stockNumbers}
+            onChange={(e) => setStockNumbers(e.target.value)}
+          />
+        </div>
+
+        {/* Per-driver pay section */}
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 8 }}>
+          DRIVER PAY
+        </div>
+        {driverForms.map((df, idx) => {
+          const driver = allProfiles.find((p) => p.id === df.driverId);
+          const trip = groupTrips.find((t) => t.id === df.tripId);
+          const isFinalized = trip?.status === "finalized";
+          return (
+            <div
+              key={df.tripId}
+              style={{
+                padding: "12px 14px",
+                background: isFinalized ? "rgba(74,232,133,0.05)" : "var(--bg)",
+                border: `1px solid ${isFinalized ? "var(--success)" : "var(--border)"}`,
+                borderRadius: "var(--radius-sm)",
+                marginBottom: 8,
+                opacity: isFinalized ? 0.6 : 1,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{driver?.name || "—"}</span>
+                {isFinalized ? (
+                  <span style={{ fontSize: 11, color: "var(--success)", fontWeight: 700 }}>FINALIZED</span>
+                ) : (
+                  <button
+                    className="btn-edit"
+                    style={{ background: "rgba(74,232,133,0.1)", color: "var(--success)", borderColor: "var(--success)", fontSize: 11 }}
+                    onClick={() => handleFinalizeDriver(idx)}
+                    disabled={saving}
+                  >
+                    Finalize
+                  </button>
+                )}
+              </div>
+              {!isFinalized && (
+                <div className="form-grid" style={{ gap: 8 }}>
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label style={{ fontSize: 11 }}>Pay ($)</label>
+                    <input
+                      type="number"
+                      placeholder="45.00"
+                      value={df.pay}
+                      onChange={(e) => setDriverField(idx, "pay", e.target.value)}
+                    />
+                  </div>
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label style={{ fontSize: 11 }}>Hours</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={df.hours}
+                      onChange={(e) => setDriverField(idx, "hours", e.target.value)}
+                    />
+                  </div>
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label style={{ fontSize: 11 }}>Miles</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={df.miles}
+                      onChange={(e) => setDriverField(idx, "miles", e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Shared cost breakdown */}
+        <div style={{ marginTop: 16, padding: "12px 14px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 10 }}>SHARED COSTS</div>
+          <div className="form-grid">
+            <div className="field">
+              <label>Fuel ($)</label>
+              <input type="number" placeholder="0.00" value={fuelCost} onChange={(e) => setFuelCost(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Other Expenses ($)</label>
+              <input type="number" placeholder="0.00" value={otherCost} onChange={(e) => setOtherCost(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Estimated Cost ($)</label>
+              <input type="number" placeholder="0.00" value={estimatedCost} onChange={(e) => setEstimatedCost(e.target.value)} />
+            </div>
+          </div>
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700 }}>
+            <span style={{ color: "var(--muted)" }}>Total (All Drivers + Costs)</span>
+            <span style={{ color: "var(--text)" }}>${computedActualCost.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {error && <div className="error-msg" style={{ textAlign: "left", marginTop: 8 }}>{error}</div>}
+
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={onClose}>Cancel</button>
+          {allCompleted && (
+            <button
+              className="btn btn-primary"
+              style={{ padding: "8px 16px", fontSize: 12 }}
+              onClick={handleFinalizeAll}
+              disabled={saving}
+            >
+              {saving ? "Saving..." : `Finalize All ${groupTrips.length} Drivers →`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── ADMIN TRIPS ──────────────────────────────────────────────────────────────
 function AdminTrips({
   drivers,
@@ -4942,8 +5611,12 @@ function AdminTrips({
 }) {
   const [view, setView] = useState(prefillData ? "create" : "active"); // active | all | create
   const [finalizingTrip, setFinalizingTrip] = useState(null);
+  const [finalizingAAGroup, setFinalizingAAGroup] = useState(null); // array of trips
   const [editingTrip, setEditingTrip] = useState(null);
   const [acting, setActing] = useState(null); // trip id being acted on
+  const [expandedGroups, setExpandedGroups] = useState({}); // group_id -> bool
+  const [editingStockNumbers, setEditingStockNumbers] = useState(null); // group_id
+  const [stockNumberDraft, setStockNumberDraft] = useState("");
 
   async function handleEndTrip(trip) {
     setActing(trip.id);
@@ -4966,11 +5639,48 @@ function AdminTrips({
     if (!error) setTrips((prev) => prev.filter((t) => t.id !== trip.id));
   }
 
+  async function handleSaveStockNumbers(groupId, value) {
+    const groupTrips = trips.filter((t) => t.group_id === groupId);
+    const ids = groupTrips.map((t) => t.id);
+    const { error } = await supabase
+      .from("trips")
+      .update({ stock_numbers: value || null })
+      .in("id", ids);
+    if (!error) {
+      setTrips((prev) =>
+        prev.map((t) => (ids.includes(t.id) ? { ...t, stock_numbers: value || null } : t)),
+      );
+    }
+    setEditingStockNumbers(null);
+  }
+
   const active = trips.filter((t) =>
     ["pending", "in_progress", "completed"].includes(t.status),
   );
   const all = trips;
   const displayed = view === "create" ? [] : view === "active" ? active : all;
+
+  // Group AA trips by group_id, leave others as individual
+  function buildDisplayItems(tripList) {
+    const items = [];
+    const seenGroups = new Set();
+    const sorted = [...tripList].sort(
+      (a, b) => new Date(b.scheduled_pickup) - new Date(a.scheduled_pickup),
+    );
+    for (const trip of sorted) {
+      if (trip.trip_type === "aa" && trip.group_id) {
+        if (seenGroups.has(trip.group_id)) continue;
+        seenGroups.add(trip.group_id);
+        const groupTrips = sorted.filter((t) => t.group_id === trip.group_id);
+        items.push({ type: "aa_group", group_id: trip.group_id, trips: groupTrips });
+      } else {
+        items.push({ type: "trip", trip });
+      }
+    }
+    return items;
+  }
+
+  const displayItems = buildDisplayItems(displayed);
 
   function getDriverNames(trip) {
     const p1 = allProfiles.find((p) => p.id === trip.driver_id);
@@ -5003,6 +5713,24 @@ function AdminTrips({
           allProfiles={allProfiles}
           onFinalized={handleFinalized}
           onClose={() => setFinalizingTrip(null)}
+        />
+      )}
+      {finalizingAAGroup && (
+        <AAGroupFinalizeModal
+          groupTrips={finalizingAAGroup}
+          allProfiles={allProfiles}
+          onFinalized={(tripId) => {
+            handleFinalized(tripId);
+            // If all in group are finalized, close modal
+            const remaining = finalizingAAGroup.filter(
+              (t) => t.id !== tripId && t.status !== "finalized",
+            );
+            if (remaining.length === 0) setFinalizingAAGroup(null);
+            else setFinalizingAAGroup((prev) =>
+              prev.map((t) => (t.id === tripId ? { ...t, status: "finalized" } : t)),
+            );
+          }}
+          onClose={() => setFinalizingAAGroup(null)}
         />
       )}
       {editingTrip && (
@@ -5078,18 +5806,136 @@ function AdminTrips({
                 </tr>
               </thead>
               <tbody>
-                {[...displayed]
-                  .sort(
-                    (a, b) =>
-                      new Date(b.scheduled_pickup) -
-                      new Date(a.scheduled_pickup),
-                  )
-                  .map((trip) => (
+                {displayItems.map((item) => {
+                  // ── AA GROUP ROW ──
+                  if (item.type === "aa_group") {
+                    const { group_id, trips: groupTrips } = item;
+                    const expanded = expandedGroups[group_id];
+                    const label = aaGroupLabel(groupTrips[0]);
+                    const driverNames = groupTrips.map((t) => {
+                      const p = allProfiles.find((p) => p.id === t.driver_id);
+                      return p?.name || "—";
+                    }).join(", ");
+                    const statuses = groupTrips.map((t) => t.status);
+                    const anyCompleted = statuses.includes("completed");
+                    const allFinalized = statuses.every((s) => s === "finalized");
+                    const groupStatus = allFinalized ? "finalized" : anyCompleted ? "completed" : statuses.includes("in_progress") ? "in_progress" : "pending";
+
+                    return (
+                      <Fragment key={group_id}>
+                        <tr
+                          style={{ cursor: "pointer", background: expanded ? "rgba(245,166,35,0.03)" : undefined }}
+                          onClick={() => setExpandedGroups((prev) => ({ ...prev, [group_id]: !prev[group_id] }))}
+                        >
+                          <td><TripStatusBadge status={groupStatus} /></td>
+                          <td style={{ whiteSpace: "nowrap" }}>🚐 AA</td>
+                          <td style={{ fontWeight: 600 }}>
+                            <span style={{ color: "var(--accent)", marginRight: 6 }}>{expanded ? "▼" : "▶"}</span>
+                            {label} <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 12 }}>({groupTrips.length} drivers)</span>
+                          </td>
+                          <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--muted)" }}>{groupTrips[0]?.crm_id}</td>
+                          <td>{groupTrips[0]?.city}</td>
+                          <td style={{ color: "var(--muted)", fontSize: 12 }}>
+                            {new Date(groupTrips[0].scheduled_pickup).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </td>
+                          <td colSpan="2" style={{ fontSize: 12, color: "var(--muted)" }}>
+                            {/* Stock numbers inline */}
+                            {editingStockNumbers === group_id ? (
+                              <span onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 4 }}>
+                                <input
+                                  type="text"
+                                  value={stockNumberDraft}
+                                  onChange={(e) => setStockNumberDraft(e.target.value)}
+                                  style={{ fontSize: 12, padding: "2px 6px", width: 140 }}
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleSaveStockNumbers(group_id, stockNumberDraft);
+                                    if (e.key === "Escape") setEditingStockNumbers(null);
+                                  }}
+                                />
+                                <button className="btn-edit" style={{ fontSize: 10, padding: "2px 6px" }} onClick={() => handleSaveStockNumbers(group_id, stockNumberDraft)}>Save</button>
+                              </span>
+                            ) : (
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingStockNumbers(group_id);
+                                  setStockNumberDraft(groupTrips[0]?.stock_numbers || "");
+                                }}
+                                style={{ cursor: "pointer", borderBottom: "1px dashed var(--muted)" }}
+                                title="Click to edit stock numbers"
+                              >
+                                {groupTrips[0]?.stock_numbers || "No stock #s — click to add"}
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                            {isAdmin && anyCompleted && !allFinalized && (
+                              <button
+                                className="btn-edit"
+                                style={{ background: "rgba(74,232,133,0.1)", color: "var(--success)", borderColor: "var(--success)" }}
+                                onClick={() => setFinalizingAAGroup(groupTrips)}
+                              >
+                                Finalize Group
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                        {/* Expanded individual driver rows */}
+                        {expanded && groupTrips.map((trip) => (
+                          <tr key={trip.id} style={{ background: "rgba(245,166,35,0.02)" }}>
+                            <td style={{ paddingLeft: 28 }}><TripStatusBadge status={trip.status} /></td>
+                            <td></td>
+                            <td style={{ fontWeight: 600, paddingLeft: 28 }}>
+                              {(() => { const p = allProfiles.find((p) => p.id === trip.driver_id); return p ? p.name : "—"; })()}
+                            </td>
+                            <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--muted)" }}>{trip.crm_id}</td>
+                            <td>{trip.city}</td>
+                            <td style={{ color: "var(--muted)", fontSize: 12 }}>
+                              {new Date(trip.scheduled_pickup).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{" "}
+                              {new Date(trip.scheduled_pickup).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                            </td>
+                            <td style={{ color: "var(--muted)", fontSize: 12 }}>
+                              {trip.actual_start ? new Date(trip.actual_start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}
+                            </td>
+                            <td style={{ color: "var(--muted)", fontSize: 12 }}>
+                              {trip.actual_end ? new Date(trip.actual_end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"}
+                            </td>
+                            <td style={{ whiteSpace: "nowrap" }}>
+                              {isAdmin && trip.status === "in_progress" && (
+                                <button
+                                  className="btn-edit"
+                                  style={{ background: "rgba(232,90,74,0.1)", color: "var(--danger)", borderColor: "var(--danger)" }}
+                                  onClick={() => handleEndTrip(trip)}
+                                  disabled={acting === trip.id}
+                                >
+                                  {acting === trip.id ? "Ending..." : "⏹ End"}
+                                </button>
+                              )}
+                              {isAdmin && trip.status === "completed" && (
+                                <button
+                                  className="btn-edit"
+                                  style={{ background: "rgba(74,232,133,0.1)", color: "var(--success)", borderColor: "var(--success)" }}
+                                  onClick={() => setFinalizingTrip(trip)}
+                                >
+                                  Finalize
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  }
+
+                  // ── REGULAR TRIP ROW ──
+                  const trip = item.trip;
+                  return (
                     <tr key={trip.id}>
                       <td>
                         <TripStatusBadge status={trip.status} />
                       </td>
-                      <td style={{ whiteSpace: "nowrap" }}>{trip.trip_type === "fly" ? "✈ Fly" : "🚗 Drive"}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>{tripTypeLabel(trip.trip_type)}</td>
                       <td style={{ fontWeight: 600 }}>
                         {getDriverNames(trip)}
                       </td>
@@ -5200,7 +6046,8 @@ function AdminTrips({
                         )}
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -5293,7 +6140,7 @@ function DriverTrips({ driver, trips, setTrips }) {
               </span>
               <TripStatusBadge status={trip.status} />
               <span style={{ fontSize: 12, color: "var(--muted)" }}>
-                {trip.trip_type === "fly" ? "✈ Fly" : "🚗 Drive"}
+                {tripTypeLabel(trip.trip_type)}
               </span>
             </div>
             <div

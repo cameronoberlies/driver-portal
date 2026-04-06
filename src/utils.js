@@ -91,9 +91,37 @@ export function parseCarpagePickup(timeText) {
   return parsed.toISOString().slice(0, 16);
 }
 
+// ─── TRIP TYPE HELPERS ────────────────────────────────────────────────────────
+
+const TRIP_TYPE_LABELS = {
+  fly: "✈ Fly",
+  drive: "🚗 Drive",
+  aa: "🚐 AA",
+  courier: "📦 Courier",
+  airport: "🛫 Airport",
+};
+
+export function tripTypeLabel(type) {
+  return TRIP_TYPE_LABELS[type] || type;
+}
+
+export function aaGroupLabel(trip) {
+  const d = trip.scheduled_pickup ? new Date(trip.scheduled_pickup) : new Date();
+  return `AA ${d.getMonth() + 1}/${d.getDate()}`;
+}
+
 // ─── TRIP HELPERS ─────────────────────────────────────────────────────────────
 
 export function validateTripForm(form) {
+  if (form.trip_type === "aa") {
+    if (!form.aa_driver_ids || form.aa_driver_ids.length === 0) {
+      return "AA trips require at least one driver.";
+    }
+    if (!form.city) {
+      return "Destination city is required for AA trips.";
+    }
+    return null;
+  }
   if (!form.driver_id || !form.scheduled_pickup) {
     return "Driver and pickup time are required.";
   }
@@ -107,8 +135,7 @@ export function validateTripForm(form) {
 }
 
 export function buildTripPayload(form) {
-  return {
-    driver_id: form.driver_id,
+  const base = {
     trip_type: form.trip_type,
     city: form.city,
     crm_id: form.crm_id,
@@ -116,14 +143,39 @@ export function buildTripPayload(form) {
     scheduled_pickup: new Date(form.scheduled_pickup).toISOString(),
     notes: form.notes || null,
     status: "pending",
-    second_driver_id: form.trip_type === "drive" ? form.second_driver_id : null,
-    designated_driver_id: form.trip_type === "drive"
-      ? form.designated_driver_id || form.driver_id
-      : form.driver_id,
+  };
+
+  if (form.trip_type === "drive") {
+    return {
+      ...base,
+      driver_id: form.driver_id,
+      second_driver_id: form.second_driver_id,
+      designated_driver_id: form.designated_driver_id || form.driver_id,
+    };
+  }
+
+  if (form.trip_type === "courier") {
+    return {
+      ...base,
+      driver_id: form.driver_id,
+      designated_driver_id: form.driver_id,
+    };
+  }
+
+  // fly (and airport — created separately via createAirportDriverTrip)
+  return {
+    ...base,
+    driver_id: form.driver_id,
+    designated_driver_id: form.driver_id,
   };
 }
 
-export const CSV_HEADERS = ["Driver", "Date", "City", "Carpage ID", "Carpage Link", "Pay", "Hours", "Miles", "Actual Cost", "Estimated Cost", "Recon Missed"];
+export const CSV_HEADERS = [
+  "Driver", "Date", "City", "Trip Type", "Carpage ID", "Carpage Link",
+  "Pay", "Hours", "Miles",
+  "Flight Ticket", "Rideshare", "Fuel", "Other Expenses", "Actual Cost", "Estimated Cost",
+  "Stock Numbers", "Recon Missed",
+];
 
 export function buildCSVContent(entries, profiles) {
   const rows = [...entries]
@@ -134,13 +186,19 @@ export function buildCSVContent(entries, profiles) {
         driver?.name ?? "",
         e.date,
         e.city,
+        e.trip_type ?? "",
         e.crm_id,
         e.carpage_link ?? "",
         e.pay,
         e.hours,
         e.miles ?? 0,
+        e.flight_cost ?? "",
+        e.rideshare_cost ?? "",
+        e.fuel_cost ?? "",
+        e.other_cost ?? "",
         e.actual_cost ?? 0,
         e.estimated_cost ?? 0,
+        e.stock_numbers ?? "",
         e.recon_missed ? "Yes" : "No",
       ];
     });

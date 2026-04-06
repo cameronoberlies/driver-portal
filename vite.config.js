@@ -3,6 +3,10 @@ const react = require('@vitejs/plugin-react')
 
 module.exports = defineConfig({
   plugins: [react()],
+  server: {
+    host: '0.0.0.0',
+    port: 3000,
+  },
   test: {
     environment: 'jsdom',
     globals: true,
