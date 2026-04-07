@@ -2110,7 +2110,7 @@ function LiveDriversMap({ drivers }) {
     ).addTo(map);
     // Dealership geofence boundary (Discovery Automotive - Shelby, NC)
     window.L.circle([35.270366805900295, -81.49624707303701], {
-      radius: 300,
+      radius: 250,
       color: "#f5a623",
       fillColor: "#f5a623",
       fillOpacity: 0.08,
@@ -2119,7 +2119,7 @@ function LiveDriversMap({ drivers }) {
     }).addTo(map).bindPopup(
       `<div style="font-family: 'Barlow Condensed', sans-serif; background: #161a20; color: #e8ecf0;">
         <div style="font-size: 14px; font-weight: 800; letter-spacing: 1px;">DEALERSHIP</div>
-        <div style="font-size: 11px; color: #6b7585;">300m geofence radius</div>
+        <div style="font-size: 11px; color: #6b7585;">250m geofence radius</div>
       </div>`
     );
 
@@ -4376,7 +4376,12 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
       const getInput = (name) =>
         doc.querySelector(`input[name="${name}"]`)?.value ?? "";
 
-      const crmId = new URL(url).searchParams.get("cid") ?? "";
+      // Try to find CRM ID (e.g. "GN191") from page content, fall back to URL cid
+      const crmId = (() => {
+        const idMatch = html.match(/\bID:\s*([A-Z]{2}\d+)/);
+        if (idMatch) return idMatch[1];
+        return new URL(url).searchParams.get("cid") ?? "";
+      })();
       const address = getInput("address");
       const city = parseCarpageCity(address);
       const scheduledPickup = parseCarpagePickup(getInput("pickup_time_text"));
@@ -5650,8 +5655,19 @@ function AdminTrips({
       .select()
       .single();
     setActing(null);
-    if (!error && data)
+    if (!error && data) {
       setTrips((prev) => prev.map((t) => (t.id === data.id ? data : t)));
+      // Clean up live location so driver disappears from Live map
+      await supabase.from("driver_locations").delete().eq("driver_id", trip.driver_id);
+      if (trip.second_driver_id) {
+        await supabase.from("driver_locations").delete().eq("driver_id", trip.second_driver_id);
+      }
+      // Close any unclosed stops for this trip
+      await supabase.from("trip_stops")
+        .update({ ended_at: new Date().toISOString(), duration_minutes: 0 })
+        .eq("trip_id", trip.id)
+        .is("ended_at", null);
+    }
   }
 
   async function handleDeleteTrip(trip) {
@@ -5714,10 +5730,14 @@ function AdminTrips({
   }
 
   function handleFinalized(tripId) {
+    const trip = trips.find((t) => t.id === tripId);
     setTrips((prev) =>
       prev.map((t) => (t.id === tripId ? { ...t, status: "finalized" } : t)),
     );
     setFinalizingTrip(null);
+    // Clean up live location
+    if (trip?.driver_id) supabase.from("driver_locations").delete().eq("driver_id", trip.driver_id);
+    if (trip?.second_driver_id) supabase.from("driver_locations").delete().eq("driver_id", trip.second_driver_id);
     // Reload entries so new log entries appear
     supabase
       .from("entries")
