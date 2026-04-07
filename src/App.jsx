@@ -6840,6 +6840,336 @@ function AdminAvailability({ drivers }) {
 }
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
+// ─── AI CHAT ─────────────────────────────────────────────────────────────────
+function AIChat() {
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState([]);
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  async function handleSend() {
+    const msg = input.trim();
+    if (!msg || loading) return;
+    setInput("");
+    setMessages((prev) => [...prev, { role: "user", text: msg }]);
+    setLoading(true);
+
+    try {
+      const res = await fetch(
+        "https://yincjogkjvotupzgetqg.supabase.co/functions/v1/ai-chat",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey:
+              "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
+          },
+          body: JSON.stringify({ message: msg, history }),
+        }
+      );
+      const data = await res.json();
+      const reply = data.reply || data.error || "No response";
+      setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
+      // Update history for multi-turn conversation
+      setHistory((prev) => [
+        ...prev,
+        { role: "user", content: msg },
+        { role: "assistant", content: reply },
+      ]);
+    } catch (e) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: "Error: " + e.message },
+      ]);
+    }
+    setLoading(false);
+  }
+
+  if (!open) {
+    return (
+      <div
+        onClick={() => setOpen(true)}
+        style={{
+          position: "fixed",
+          bottom: 24,
+          right: 24,
+          width: 56,
+          height: 56,
+          borderRadius: "50%",
+          background: "var(--accent)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          boxShadow: "0 4px 20px rgba(245,166,35,0.4)",
+          zIndex: 9999,
+          transition: "transform 0.2s",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.1)")}
+        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+      >
+        <span style={{ fontSize: 24, color: "#0a0c10" }}>AI</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 24,
+        right: 24,
+        width: 420,
+        maxHeight: "70vh",
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
+        display: "flex",
+        flexDirection: "column",
+        zIndex: 9999,
+        overflow: "hidden",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          padding: "14px 18px",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          background: "var(--bg)",
+        }}
+      >
+        <div>
+          <span
+            style={{
+              fontFamily: "var(--font-head)",
+              fontSize: 15,
+              fontWeight: 800,
+              letterSpacing: 1,
+              color: "var(--accent)",
+            }}
+          >
+            DRIVERPAY AI
+          </span>
+          <span
+            style={{ fontSize: 11, color: "var(--muted)", marginLeft: 8 }}
+          >
+            Ask anything
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => {
+              setMessages([]);
+              setHistory([]);
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--muted)",
+              cursor: "pointer",
+              fontSize: 11,
+              padding: "4px 8px",
+            }}
+            title="Clear chat"
+          >
+            Clear
+          </button>
+          <button
+            onClick={() => setOpen(false)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--muted)",
+              cursor: "pointer",
+              fontSize: 18,
+              lineHeight: 1,
+              padding: "0 4px",
+            }}
+          >
+            x
+          </button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "14px 18px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          minHeight: 200,
+          maxHeight: "50vh",
+        }}
+      >
+        {messages.length === 0 && (
+          <div
+            style={{
+              color: "var(--muted)",
+              fontSize: 13,
+              textAlign: "center",
+              marginTop: 40,
+            }}
+          >
+            <div style={{ fontSize: 28, marginBottom: 8 }}>AI</div>
+            <div>Ask about drivers, flights, trips, or costs</div>
+            <div
+              style={{
+                marginTop: 16,
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              {[
+                "Where are my drivers?",
+                "How many trips this week?",
+                "What flights are in the air?",
+                "Give me a weekly summary",
+              ].map((q) => (
+                <button
+                  key={q}
+                  onClick={() => {
+                    setInput(q);
+                  }}
+                  style={{
+                    background: "var(--bg)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "8px 12px",
+                    color: "var(--text)",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div
+            key={i}
+            style={{
+              alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+              maxWidth: "85%",
+            }}
+          >
+            <div
+              style={{
+                background:
+                  m.role === "user"
+                    ? "var(--accent)"
+                    : "var(--bg)",
+                color: m.role === "user" ? "#0a0c10" : "var(--text)",
+                padding: "10px 14px",
+                borderRadius:
+                  m.role === "user"
+                    ? "14px 14px 4px 14px"
+                    : "14px 14px 14px 4px",
+                fontSize: 13,
+                lineHeight: 1.5,
+                whiteSpace: "pre-wrap",
+                border:
+                  m.role === "assistant"
+                    ? "1px solid var(--border)"
+                    : "none",
+              }}
+            >
+              {m.text}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div
+            style={{
+              alignSelf: "flex-start",
+              background: "var(--bg)",
+              border: "1px solid var(--border)",
+              padding: "10px 14px",
+              borderRadius: "14px 14px 14px 4px",
+              fontSize: 13,
+              color: "var(--muted)",
+            }}
+          >
+            Thinking...
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <div
+        style={{
+          padding: "12px 14px",
+          borderTop: "1px solid var(--border)",
+          display: "flex",
+          gap: 8,
+          background: "var(--bg)",
+        }}
+      >
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          placeholder="Ask about drivers, flights, trips..."
+          style={{
+            flex: 1,
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-sm)",
+            padding: "10px 14px",
+            color: "var(--text)",
+            fontSize: 13,
+            outline: "none",
+          }}
+          autoFocus
+        />
+        <button
+          onClick={handleSend}
+          disabled={loading || !input.trim()}
+          style={{
+            background: "var(--accent)",
+            border: "none",
+            borderRadius: "var(--radius-sm)",
+            padding: "10px 16px",
+            color: "#0a0c10",
+            fontWeight: 800,
+            fontSize: 12,
+            cursor: loading ? "wait" : "pointer",
+            opacity: loading || !input.trim() ? 0.5 : 1,
+            letterSpacing: 1,
+          }}
+        >
+          {loading ? "..." : "ASK"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [allProfiles, setAllProfiles] = useState([]);
@@ -6954,6 +7284,7 @@ export default function App() {
       ) : (
         <>
           <Topbar user={user} onLogout={handleLogout} />
+          {showAdminDashboard && <AIChat />}
           {!showAdminDashboard ? (
             <DriverDashboard
               driver={user}
