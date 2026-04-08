@@ -3453,6 +3453,7 @@ function AdminDashboard({
   setTrips,
   prefillData,
   onPrefillConsumed,
+  onTabChange,
 }) {
   const isAdmin = user.role === "admin";
   const drivers = allProfiles.filter((u) => u.role === "driver");
@@ -3482,6 +3483,7 @@ function AdminDashboard({
     setTabRaw(t);
     const path = TAB_PATHS[t] || "/";
     window.history.pushState(null, "", path);
+    if (onTabChange) onTabChange();
   }
 
   useEffect(() => {
@@ -7244,6 +7246,23 @@ export default function App() {
     loadData();
   }, [user]);
 
+  // Refresh data when switching tabs
+  const refreshData = async () => {
+    if (!user) return;
+    const [{ data: profiles }, { data: entryData }, { data: tripData }] = await Promise.all([
+      supabase.from("profiles").select("*"),
+      user.role === "driver"
+        ? supabase.from("entries").select("*").eq("driver_id", user.id).order("date", { ascending: false })
+        : supabase.from("entries").select("*").order("date", { ascending: false }),
+      user.role === "driver"
+        ? supabase.from("trips").select("*").or(`driver_id.eq.${user.id},second_driver_id.eq.${user.id}`).order("scheduled_pickup", { ascending: false })
+        : supabase.from("trips").select("*").order("scheduled_pickup", { ascending: false }),
+    ]);
+    if (profiles) setAllProfiles(profiles);
+    if (entryData) setEntries(entryData);
+    if (tripData) setTrips(tripData);
+  };
+
   async function handleLogout() {
     await supabase.auth.signOut();
     setUser(null);
@@ -7306,6 +7325,7 @@ export default function App() {
               setTrips={setTrips}
               prefillData={prefillData}
               onPrefillConsumed={() => setPrefillData(null)}
+              onTabChange={refreshData}
             />
           )}
         </>
