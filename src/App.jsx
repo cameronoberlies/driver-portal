@@ -3287,6 +3287,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
               onChange={(e) => setForm({ ...form, role: e.target.value })}
             >
               <option value="driver">Driver</option>
+              <option value="caller">Caller (Read-Only)</option>
               <option value="admin">Admin</option>
             </select>
           </div>
