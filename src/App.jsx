@@ -2172,6 +2172,23 @@ function LiveDriversMap({ drivers }) {
         stopInfo = `<div style="font-size: 11px; color: #ff453a; font-weight: 700; margin-top: 4px;">STOPPED ${stopMins}m</div>`;
       }
 
+      // Calculate distance from dealership (Haversine)
+      const DEALER_LAT = 35.270367;
+      const DEALER_LON = -81.496247;
+      const toRad = (deg) => deg * Math.PI / 180;
+      const dLat = toRad(loc.latitude - DEALER_LAT);
+      const dLon = toRad(loc.longitude - DEALER_LON);
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(toRad(DEALER_LAT)) * Math.cos(toRad(loc.latitude)) *
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const distMiles = 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      const etaHours = distMiles / 60;
+      const etaLabel = distMiles < 5
+        ? "At the dealership"
+        : etaHours < 1
+          ? `~${Math.round(distMiles)} mi out, ~${Math.round(etaHours * 60)} min`
+          : `~${Math.round(distMiles)} mi out, ~${etaHours.toFixed(1)} hrs`;
+
       const icon = window.L.divIcon({
         className: "",
         html: `
@@ -2199,7 +2216,7 @@ function LiveDriversMap({ drivers }) {
             <div style="font-size: 11px; color: #6b7585; letter-spacing: 1px;">LAST UPDATE</div>
             <div style="font-size: 13px; font-weight: 600; color: ${color};">${ageLabel}</div>
             ${stopInfo}
-            <div style="font-size: 10px; color: #444; margin-top: 6px;">${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}</div>
+            <div style="font-size: 12px; color: #f5a623; font-weight: 600; margin-top: 6px;">${etaLabel}</div>
           </div>
         `,
           {
@@ -2221,10 +2238,7 @@ function LiveDriversMap({ drivers }) {
     if (mapInstanceRef.current) fetchLocations(mapInstanceRef.current);
   }
 
-  const activeLocs = locations.filter((l) => {
-    const age = (new Date() - new Date(l.updated_at)) / 1000;
-    return age < 300; // active within 5 min
-  });
+  const activeLocs = locations;
 
   return (
     <div className="fade-in">
