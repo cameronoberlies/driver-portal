@@ -2566,13 +2566,17 @@ function WebTripLogs({ drivers }) {
   }
 
   function geocodeStops(stopsToGeocode) {
-    for (const stop of stopsToGeocode) {
-      if (stop.latitude && stop.longitude && !stopLocations[stop.id]) {
+    // Rate-limit geocoding: 1 request per 600ms to stay within LocationIQ limits
+    const pending = stopsToGeocode.filter(
+      (stop) => stop.latitude && stop.longitude && !stopLocations[stop.id]
+    );
+    pending.forEach((stop, i) => {
+      setTimeout(() => {
         webReverseGeocode(stop.latitude, stop.longitude).then((loc) => {
           if (loc) setStopLocations((prev) => ({ ...prev, [stop.id]: loc }));
         });
-      }
-    }
+      }, i * 600);
+    });
   }
 
   useEffect(() => {
@@ -2674,7 +2678,7 @@ function WebTripLogs({ drivers }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>{driverName}</div>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>{trip.city} · {trip.crm_id || "—"}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{trip.trip_type === "airport" ? `Airport Drop-off · ${trip.city}` : trip.city} · {trip.crm_id || "—"}</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 20, fontWeight: 900, color: "var(--accent)" }}>{elapsed}m</div>
@@ -3517,6 +3521,7 @@ function AdminDashboard({
   // Filters
   const [filterDriver, setFilterDriver] = useState("all");
   const [filterCity, setFilterCity] = useState("");
+  const [filterCrmId, setFilterCrmId] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
 
@@ -3617,6 +3622,8 @@ function AdminDashboard({
   const filteredEntries = entries.filter((e) => {
     if (filterDriver !== "all" && e.driver_id !== filterDriver) return false;
     if (filterCity && !e.city.toLowerCase().includes(filterCity.toLowerCase()))
+      return false;
+    if (filterCrmId && !(e.crm_id || "").toLowerCase().includes(filterCrmId.toLowerCase()))
       return false;
     if (filterFrom && e.date < filterFrom) return false;
     if (filterTo && e.date > filterTo) return false;
@@ -4064,6 +4071,15 @@ function AdminDashboard({
                 </select>
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
+                <label>CRM ID</label>
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={filterCrmId}
+                  onChange={(e) => setFilterCrmId(e.target.value)}
+                />
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
                 <label>From</label>
                 <input
                   type="date"
@@ -4085,6 +4101,7 @@ function AdminDashboard({
                 onClick={() => {
                   setFilterDriver("all");
                   setFilterCity("");
+                  setFilterCrmId("");
                   setFilterFrom("");
                   setFilterTo("");
                 }}

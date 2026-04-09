@@ -401,6 +401,30 @@ export default function OpsHealth() {
           <button onClick={fetchData} style={styles.refreshBtn} disabled={loading}>
             {loading ? "..." : "REFRESH"}
           </button>
+          <button
+            onClick={async () => {
+              if (!confirm("Send OTA update push to all drivers? Drivers without active trips will auto-update.")) return;
+              try {
+                const res = await fetch(
+                  "https://yincjogkjvotupzgetqg.supabase.co/functions/v1/push-ota-update",
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las",
+                    },
+                  }
+                );
+                const data = await res.json();
+                alert(`OTA push sent to ${data.sent} driver(s)`);
+              } catch (e) {
+                alert("Failed: " + e.message);
+              }
+            }}
+            style={{ ...styles.refreshBtn, background: "#f5a623", color: "#0a0c10", marginLeft: 8 }}
+          >
+            PUSH OTA
+          </button>
         </div>
       </div>
 
