@@ -174,7 +174,7 @@ export const CSV_HEADERS = [
   "Driver", "Date", "City", "Trip Type", "Carpage ID", "Carpage Link",
   "Pay", "Hours", "Miles",
   "Flight Ticket", "Rideshare", "Fuel", "Other Expenses", "Actual Cost", "Estimated Cost",
-  "Stock Numbers", "Recon Missed",
+  "Stock Numbers", "Recon Missed", "Turned Down", "Additional Recon Cost",
 ];
 
 export function buildCSVContent(entries, profiles) {
@@ -200,6 +200,8 @@ export function buildCSVContent(entries, profiles) {
         e.estimated_cost ?? 0,
         e.stock_numbers ?? "",
         e.recon_missed ? "Yes" : "No",
+        e.turned_down ? "Yes" : "No",
+        e.additional_recon_cost ?? "",
       ];
     });
   return [CSV_HEADERS, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n");

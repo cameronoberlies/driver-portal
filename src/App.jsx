@@ -151,7 +151,7 @@ const css = `
   .topbar-user { font-size: 13px; color: var(--muted); letter-spacing: 0.2px; }
   .topbar-user strong { color: var(--text); font-weight: 600; }
 
-  .page { padding: 40px 36px; max-width: 1140px; margin: 0 auto; width: 100%; }
+  .page { padding: 40px 36px; max-width: 1320px; margin: 0 auto; width: 100%; }
   .page-title { font-family: var(--font-head); font-size: 34px; font-weight: 800; letter-spacing: 2.5px; text-transform: uppercase; margin-bottom: 6px; line-height: 1.1; }
   .page-sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; letter-spacing: 0.2px; }
 
@@ -1527,7 +1527,7 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
               color: form.recon_missed ? "var(--danger)" : "var(--text)",
             }}
           >
-            Recon was missed on this vehicle
+            Driver Missed Recon (resets bonus streak)
           </label>
         </div>
         {error && <div className="error-msg">{error}</div>}
@@ -1693,7 +1693,13 @@ function MileageCostReport({
   const totalActual = filtered.reduce((s, e) => s + Number(e.actual_cost ?? 0), 0);
   const totalEstimated = filtered.reduce((s, e) => s + Number(e.estimated_cost ?? 0), 0);
   const totalMiles = filtered.reduce((s, e) => s + Number(e.miles ?? 0), 0);
-  const variance = totalActual - totalEstimated;
+  // Turned down trips: actual cost counts but estimated doesn't (no vehicle bought)
+  const turnedDownCost = filtered.filter(e => e.turned_down).reduce((s, e) => s + Number(e.actual_cost ?? 0), 0);
+  const turnedDownEstimated = filtered.filter(e => e.turned_down).reduce((s, e) => s + Number(e.estimated_cost ?? 0), 0);
+  // Additional recon: unexpected repair costs deducted from variance pool
+  const additionalReconTotal = filtered.reduce((s, e) => s + Number(e.additional_recon_cost ?? 0), 0);
+  // Variance = (actual - estimated) for purchased vehicles + turned down loss + additional recon
+  const variance = (totalActual - totalEstimated) + turnedDownEstimated + additionalReconTotal;
 
   const periodLabel =
     reportType === "weekly"
@@ -3409,6 +3415,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
               <th>Email</th>
               <th>Role</th>
               <th>Phone</th>
+              <th>Notifications</th>
               <th>Manual Trans</th>
               <th>Willing to Fly</th>
               <th>Actions</th>
@@ -3425,12 +3432,19 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
               <tr key={user.id}>
                 <td style={{ fontWeight: 600 }}>{user.name}</td>
                 <td style={{ color: "var(--muted)", fontSize: 13 }}>{user.email || "—"}</td>
-                <td style={{ textTransform: "capitalize" }}>
+                <td style={{ textTransform: "capitalize", whiteSpace: "nowrap" }}>
                   {user.role === "admin" && <span style={{ color: "var(--accent)" }}>★ </span>}
                   {user.role}
                 </td>
-                <td style={{ color: "var(--muted)", fontSize: 13 }}>
+                <td style={{ color: "var(--muted)", fontSize: 13, whiteSpace: "nowrap" }}>
                   {user.phone_number || "—"}
+                </td>
+                <td style={{ textAlign: "center" }}>
+                  {user.role === "driver" ? (
+                    user.push_token
+                      ? <span style={{ color: "var(--success)" }}>✓</span>
+                      : <span style={{ color: "var(--danger)", fontWeight: 700, fontSize: 11 }}>OFF</span>
+                  ) : <span style={{ color: "var(--muted)" }}>—</span>}
                 </td>
                 <td style={{ textAlign: "center" }}>
                   {user.can_drive_manual
@@ -3522,6 +3536,7 @@ function AdminDashboard({
   const [filterDriver, setFilterDriver] = useState("all");
   const [filterCity, setFilterCity] = useState("");
   const [filterCrmId, setFilterCrmId] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all"); // all, turned_down, recon_pending
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
 
@@ -3625,6 +3640,8 @@ function AdminDashboard({
       return false;
     if (filterCrmId && !(e.crm_id || "").toLowerCase().includes(filterCrmId.toLowerCase()))
       return false;
+    if (filterStatus === "turned_down" && !e.turned_down) return false;
+    if (filterStatus === "recon_pending" && !(e.has_additional_recon && !e.additional_recon_cost)) return false;
     if (filterFrom && e.date < filterFrom) return false;
     if (filterTo && e.date > filterTo) return false;
     return true;
@@ -3754,6 +3771,7 @@ function AdminDashboard({
                   <div className="driver-name">
                     {d.name}
                     {d.willing_to_fly && <span style={{ color: "var(--accent)", marginLeft: 8, fontSize: 12, fontWeight: 700 }}>(F)</span>}
+                    {!d.push_token && <span style={{ color: "var(--danger)", marginLeft: 8, fontSize: 10, fontWeight: 700 }}>NOTIFICATIONS OFF</span>}
                   </div>
                   <div className="driver-meta">
                     {weekEntries.length} trips this week · {monthTrips} this
@@ -4008,7 +4026,7 @@ function AdminDashboard({
                     color: form.recon_missed ? "var(--danger)" : "var(--text)",
                   }}
                 >
-                  Recon was missed on this vehicle
+                  Driver Missed Recon (resets bonus streak)
                 </label>
               </div>
               <button
@@ -4080,6 +4098,17 @@ function AdminDashboard({
                 />
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
+                <label>Status</label>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                >
+                  <option value="all">All</option>
+                  <option value="turned_down">Turned Down</option>
+                  <option value="recon_pending">Recon Pending</option>
+                </select>
+              </div>
+              <div className="field" style={{ marginBottom: 0 }}>
                 <label>From</label>
                 <input
                   type="date"
@@ -4102,6 +4131,7 @@ function AdminDashboard({
                   setFilterDriver("all");
                   setFilterCity("");
                   setFilterCrmId("");
+                  setFilterStatus("all");
                   setFilterFrom("");
                   setFilterTo("");
                 }}
@@ -4184,12 +4214,27 @@ function AdminDashboard({
                         <td style={{ color: "var(--muted)" }}>
                           {e.miles ?? 0} mi
                         </td>
-                        <td>
+                        <td style={{ whiteSpace: "nowrap" }}>
                           <span
                             className={`badge ${e.recon_missed ? "badge-miss" : "badge-ok"}`}
                           >
                             {e.recon_missed ? "MISSED" : "OK"}
                           </span>
+                          {e.turned_down && (
+                            <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: "#0a0c10", background: "var(--accent)", padding: "2px 6px", borderRadius: 3, letterSpacing: 0.5 }}>
+                              TURNED DOWN
+                            </span>
+                          )}
+                          {e.has_additional_recon && !e.additional_recon_cost && (
+                            <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: "#0a0c10", background: "#e8b44a", padding: "2px 6px", borderRadius: 3, letterSpacing: 0.5 }}>
+                              RECON PENDING
+                            </span>
+                          )}
+                          {e.has_additional_recon && e.additional_recon_cost > 0 && (
+                            <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color: "var(--danger)", letterSpacing: 0.5 }}>
+                              +{formatCurrency(e.additional_recon_cost)} recon
+                            </span>
+                          )}
                         </td>
                         {isAdmin && (
                         <td>
@@ -5031,6 +5076,9 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
     other_cost: String(trip.other_cost ?? ""),
     stock_numbers: trip.stock_numbers ?? "",
     recon_missed: false,
+    turned_down: false,
+    has_additional_recon: false,
+    additional_recon_cost: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -5072,6 +5120,9 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
         actual_cost: computedActualCost,
         estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
         stock_numbers: form.stock_numbers || null,
+        turned_down: form.turned_down,
+        has_additional_recon: form.has_additional_recon,
+        additional_recon_cost: form.has_additional_recon && form.additional_recon_cost ? Number(form.additional_recon_cost) : null,
         ...costFields,
       })
       .eq("id", trip.id);
@@ -5097,6 +5148,9 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
       trip_id: trip.id,
       trip_type: trip.trip_type,
       stock_numbers: form.stock_numbers || null,
+      turned_down: form.turned_down,
+      has_additional_recon: form.has_additional_recon,
+      additional_recon_cost: form.has_additional_recon && form.additional_recon_cost ? Number(form.additional_recon_cost) : null,
       ...costFields,
     };
     await supabase.from("entries").insert({
@@ -5355,6 +5409,23 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
         <div className="checkbox-row">
           <input
             type="checkbox"
+            id="fin-turned-down"
+            checked={form.turned_down}
+            onChange={(e) => set("turned_down", e.target.checked)}
+          />
+          <label
+            htmlFor="fin-turned-down"
+            style={{
+              color: form.turned_down ? "var(--accent)" : "var(--text)",
+            }}
+          >
+            Vehicle Turned Down (no purchase — trip cost is a loss)
+          </label>
+        </div>
+
+        <div className="checkbox-row">
+          <input
+            type="checkbox"
             id="fin-recon"
             checked={form.recon_missed}
             onChange={(e) => set("recon_missed", e.target.checked)}
@@ -5365,9 +5436,38 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
               color: form.recon_missed ? "var(--danger)" : "var(--text)",
             }}
           >
-            Recon was missed on this vehicle
+            Driver Missed Recon (resets bonus streak)
           </label>
         </div>
+
+        <div className="checkbox-row">
+          <input
+            type="checkbox"
+            id="fin-additional-recon"
+            checked={form.has_additional_recon}
+            onChange={(e) => set("has_additional_recon", e.target.checked)}
+          />
+          <label
+            htmlFor="fin-additional-recon"
+            style={{
+              color: form.has_additional_recon ? "var(--accent)" : "var(--text)",
+            }}
+          >
+            Additional Recon (unexpected repairs — deducted from variance pool)
+          </label>
+        </div>
+        {form.has_additional_recon && (
+          <div className="field" style={{ marginTop: 8 }}>
+            <label>Additional Recon Cost ($)</label>
+            <input
+              type="number"
+              placeholder="Enter amount when known"
+              value={form.additional_recon_cost}
+              onChange={(e) => set("additional_recon_cost", e.target.value)}
+            />
+          </div>
+        )}
+
         {error && (
           <div className="error-msg" style={{ textAlign: "left" }}>
             {error}
