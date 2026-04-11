@@ -4418,10 +4418,13 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
     scheduled_pickup: now.toISOString().slice(0, 16),
     notes: "",
     stock_numbers: "",
+    destination_address: "",
     aa_driver_ids: [],
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [addressSuggestions, setAddressSuggestions] = useState([]);
+  const addressTimeoutRef = useRef(null);
   const [error, setError] = useState("");
   const [fetching, setFetching] = useState(false);
 
@@ -4530,6 +4533,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
         status: "pending",
         group_id: groupId,
         stock_numbers: form.stock_numbers || null,
+        destination_address: form.destination_address || null,
       }));
 
       const { data, error: err } = await supabase
@@ -4645,6 +4649,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
       designated_driver_id: "",
       airport_driver_id: "",
       stock_numbers: "",
+      destination_address: "",
       aa_driver_ids: [],
     }));
     setTimeout(() => setSaved(false), 3000);
@@ -4838,6 +4843,53 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
             onChange={(e) => set("crm_id", e.target.value)}
           />
         </div>
+        <div className="field" style={{ gridColumn: "1 / -1", position: "relative" }}>
+          <label>Pickup Address</label>
+          <input
+            type="text"
+            placeholder="Start typing an address..."
+            value={form.destination_address}
+            onChange={(e) => {
+              set("destination_address", e.target.value);
+              const val = e.target.value;
+              if (addressTimeoutRef.current) clearTimeout(addressTimeoutRef.current);
+              if (val.length < 3) { setAddressSuggestions([]); return; }
+              addressTimeoutRef.current = setTimeout(async () => {
+                try {
+                  const res = await fetch(
+                    `https://yincjogkjvotupzgetqg.supabase.co/functions/v1/places-autocomplete?input=${encodeURIComponent(val)}`,
+                    { headers: { apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las" }}
+                  );
+                  const data = await res.json();
+                  setAddressSuggestions(data.predictions || []);
+                } catch { setAddressSuggestions([]); }
+              }, 300);
+            }}
+          />
+          {addressSuggestions.length > 0 && (
+            <div style={{
+              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)", maxHeight: 200, overflowY: "auto",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+            }}>
+              {addressSuggestions.map((s) => (
+                <div
+                  key={s.place_id}
+                  style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, borderBottom: "1px solid var(--border)" }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg)"}
+                  onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                  onClick={() => {
+                    set("destination_address", s.description);
+                    setAddressSuggestions([]);
+                  }}
+                >
+                  {s.description}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="field" style={{ gridColumn: "1 / -1" }}>
           <label>Notes</label>
           <input
@@ -4890,6 +4942,9 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
     return `${y}-${mo}-${da}T${h}:${mi}`;
   });
   const [stockNumbers, setStockNumbers] = useState(trip.stock_numbers || "");
+  const [destinationAddress, setDestinationAddress] = useState(trip.destination_address || "");
+  const [editAddressSuggestions, setEditAddressSuggestions] = useState([]);
+  const editAddressTimeoutRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const drivers = allProfiles.filter((p) => p.role === "driver");
@@ -4913,6 +4968,7 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
         second_driver_id: secondDriverId || null,
         scheduled_pickup: pickup ? new Date(pickup).toISOString() : trip.scheduled_pickup,
         stock_numbers: stockNumbers || null,
+        destination_address: destinationAddress || null,
       })
       .eq("id", trip.id)
       .select()
@@ -5014,6 +5070,52 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Flight info, seller contact, etc."
             />
+          </div>
+          <div className="field" style={{ gridColumn: "1 / -1", position: "relative" }}>
+            <label>Pickup Address</label>
+            <input
+              value={destinationAddress}
+              onChange={(e) => {
+                setDestinationAddress(e.target.value);
+                const val = e.target.value;
+                if (editAddressTimeoutRef.current) clearTimeout(editAddressTimeoutRef.current);
+                if (val.length < 3) { setEditAddressSuggestions([]); return; }
+                editAddressTimeoutRef.current = setTimeout(async () => {
+                  try {
+                    const res = await fetch(
+                      `https://yincjogkjvotupzgetqg.supabase.co/functions/v1/places-autocomplete?input=${encodeURIComponent(val)}`,
+                      { headers: { apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las" }}
+                    );
+                    const data = await res.json();
+                    setEditAddressSuggestions(data.predictions || []);
+                  } catch { setEditAddressSuggestions([]); }
+                }, 300);
+              }}
+              placeholder="Start typing an address..."
+            />
+            {editAddressSuggestions.length > 0 && (
+              <div style={{
+                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+                background: "var(--surface)", border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)", maxHeight: 200, overflowY: "auto",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+              }}>
+                {editAddressSuggestions.map((s) => (
+                  <div
+                    key={s.place_id}
+                    style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, borderBottom: "1px solid var(--border)" }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg)"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                    onClick={() => {
+                      setDestinationAddress(s.description);
+                      setEditAddressSuggestions([]);
+                    }}
+                  >
+                    {s.description}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           {tripType === "aa" && (
             <div className="field" style={{ gridColumn: "1 / -1" }}>

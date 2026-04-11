@@ -142,6 +142,7 @@ export function buildTripPayload(form) {
     carpage_link: form.carpage_link || null,
     scheduled_pickup: new Date(form.scheduled_pickup).toISOString(),
     notes: form.notes || null,
+    destination_address: form.destination_address || null,
     status: "pending",
   };
 
