@@ -2995,7 +2995,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
       <div style={{ marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
         <button onClick={onBack} className="btn-secondary">← Back</button>
         <h2 style={{ margin: 0 }}>{driver.name}</h2>
-        <button onClick={startEdit} className="btn-edit" style={{ marginLeft: "auto" }}>Edit Profile</button>
+        {canSeePay && <button onClick={startEdit} className="btn-edit" style={{ marginLeft: "auto" }}>Edit Profile</button>}
       </div>
 
       {editSuccess && <div className="success-banner">{editSuccess}</div>}
@@ -3082,14 +3082,16 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
         </div>
       </div>
 
-      <button
-        onClick={onDelete}
-        disabled={deleting}
-        className="btn-danger"
-        style={{ marginTop: 24 }}
-      >
-        {deleting ? "Deleting..." : "Delete User"}
-      </button>
+      {canSeePay && (
+        <button
+          onClick={onDelete}
+          disabled={deleting}
+          className="btn-danger"
+          style={{ marginTop: 24 }}
+        >
+          {deleting ? "Deleting..." : "Delete User"}
+        </button>
+      )}
     </div>
   );
 }
@@ -3421,9 +3423,11 @@ function ManageUsers({ allProfiles, setAllProfiles, canSeePay }) {
     <div>
       <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>Manage Users</h2>
-        <button onClick={() => setView("add")} className="btn btn-primary">
-          + Create User
-        </button>
+        {canSeePay && (
+          <button onClick={() => setView("add")} className="btn btn-primary">
+            + Create User
+          </button>
+        )}
       </div>
 
       {error && <div className="error-banner">{error}</div>}
