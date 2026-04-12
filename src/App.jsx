@@ -5220,6 +5220,28 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose, canSeePay 
     return "";
   }
 
+  // Auto-fetch ticket cost from flight monitor for fly trips
+  const [fetchedTicketCost, setFetchedTicketCost] = useState(null);
+  useEffect(() => {
+    if (trip.trip_type !== "fly" || !driver1?.name) return;
+    fetch("https://yincjogkjvotupzgetqg.supabase.co/functions/v1/flight-proxy/api/flights/today", {
+      headers: { apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpbmNqb2dranZvdHVwemdldHFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MTc2MTAsImV4cCI6MjA4ODQ5MzYxMH0._gxry5gqeBUFRz8la2IeHW8if1M1IdAHACMKUWy1las" },
+    })
+      .then((r) => r.json())
+      .then((flights) => {
+        const driverName = driver1.name.toLowerCase();
+        const match = flights.find((f) =>
+          f.passenger_name && f.passenger_name.toLowerCase().includes(driverName.split(" ")[0].toLowerCase())
+          && f.ticket_cost
+        );
+        if (match?.ticket_cost) {
+          setFetchedTicketCost(String(match.ticket_cost));
+          setForm((prev) => prev.flight_cost ? prev : { ...prev, flight_cost: String(match.ticket_cost) });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const [form, setForm] = useState({
     pay: calcPay(driver1, duration),
     pay2: driver2 ? calcPay(driver2, duration) : "",
