@@ -4296,6 +4296,7 @@ function AdminDashboard({
           prefillData={prefillData}
           onPrefillConsumed={onPrefillConsumed}
           isAdmin={isAdmin}
+          canSeePay={canSeePay}
         />
       )}
 
@@ -5929,6 +5930,7 @@ function AdminTrips({
   prefillData,
   onPrefillConsumed,
   isAdmin,
+  canSeePay,
 }) {
   const [view, setView] = useState(prefillData ? "create" : "active"); // active | all | create
   const [finalizingTrip, setFinalizingTrip] = useState(null);
