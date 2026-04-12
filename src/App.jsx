@@ -5983,8 +5983,9 @@ function AdminTrips({
   }
 
   const active = trips.filter((t) =>
-    ["pending", "in_progress", "completed"].includes(t.status),
+    ["pending", "in_progress"].includes(t.status),
   );
+  const needsFinalization = trips.filter((t) => t.status === "completed");
   const all = trips;
   const displayed = view === "create" ? [] : view === "active" ? active : all;
 
@@ -6083,7 +6084,7 @@ function AdminTrips({
       >
         {[
           ["active", `Active (${active.length})`],
-          ["all", `All Trips (${all.length})`],
+          ["all", `All Trips (${all.length})${needsFinalization.length > 0 ? ` · ${needsFinalization.length} to finalize` : ""}`],
           isAdmin && ["create", "＋ Create Trip"],
         ].filter(Boolean).map(([v, label]) => (
           <button
