@@ -594,30 +594,17 @@ function Topbar({ user, onLogout }) {
         <div className="topbar-right">
           <div className="topbar-user">
             Signed in as <strong>{user.name}</strong>
-            {user.role === "admin" && (
+            {["admin", "manager", "caller"].includes(user.role) && (
               <span
                 style={{
-                  color: "var(--accent)",
+                  color: user.role === "admin" ? "var(--accent)" : "var(--accent2)",
                   marginLeft: 6,
                   fontSize: 11,
                   fontWeight: 700,
                   letterSpacing: 1,
                 }}
               >
-                ADMIN
-              </span>
-            )}
-            {user.role === "caller" && (
-              <span
-                style={{
-                  color: "var(--accent2)",
-                  marginLeft: 6,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: 1,
-                }}
-              >
-                CALLER
+                {user.role.toUpperCase()}
               </span>
             )}
           </div>
@@ -1554,8 +1541,8 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
 }
 
 // ─── CSV EXPORT HELPER ────────────────────────────────────────────────────────
-function exportCSV(entries, profiles) {
-  const csv = buildCSVContent(entries, profiles);
+function exportCSV(entries, profiles, canSeePay = true) {
+  const csv = buildCSVContent(entries, profiles, canSeePay);
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -1800,7 +1787,7 @@ function MileageCostReport({
     { key: 1, label: "MILES" },
     { key: 2, label: "EFFICIENCY" },
     { key: 3, label: "TYPES" },
-    { key: 4, label: "SPEED" },
+    // { key: 4, label: "SPEED" }, // Disabled until OBD2
   ];
 
   return (
@@ -1825,7 +1812,7 @@ function MileageCostReport({
           <button
             className="btn btn-primary"
             style={{ padding: "10px 16px", fontSize: 12 }}
-            onClick={() => exportCSV(filtered, allProfiles)}
+            onClick={() => exportCSV(filtered, allProfiles, canSeePay)}
           >
             ⬇ Export CSV
           </button>
@@ -2692,7 +2679,7 @@ function WebTripLogs({ drivers }) {
               </div>
             </div>
 
-            {mode === "history" && trip.speed_data && trip.speed_data.top_speed > 0 && (
+            {mode === "history" && false && trip.speed_data && trip.speed_data.top_speed > 0 && (
               <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: "var(--muted)" }}>
                 <span>⚡ {trip.speed_data.top_speed} mph <span style={{ color: "#555" }}>top</span></span>
                 <span>{trip.speed_data.avg_speed} mph <span style={{ color: "#555" }}>avg</span></span>
@@ -2774,7 +2761,7 @@ function WebTripLogs({ drivers }) {
 }
 
 // ─── DRIVER DETAIL VIEW (with edit) ───────────────────────────────────────────
-function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated }) {
+function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated, canSeePay = false }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -2790,6 +2777,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
     willing_to_fly: driver.willing_to_fly || false,
     can_drive_manual: driver.can_drive_manual || false,
     drivers_license_number: driver.drivers_license_number || "",
+    hourly_wage: driver.hourly_wage ?? "",
   });
 
   function startEdit() {
@@ -2802,6 +2790,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
       willing_to_fly: driver.willing_to_fly || false,
       can_drive_manual: driver.can_drive_manual || false,
       drivers_license_number: driver.drivers_license_number || "",
+      hourly_wage: driver.hourly_wage ?? "",
     });
     setLicenseFile(null);
     setEditError("");
@@ -2882,6 +2871,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
         can_drive_manual: editForm.can_drive_manual,
         drivers_license_number: editForm.drivers_license_number || null,
         drivers_license_photo_url: licensePhotoUrl,
+        hourly_wage: editForm.hourly_wage ? Number(editForm.hourly_wage) : null,
       })
       .eq("id", driver.id);
 
@@ -2934,8 +2924,9 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
             <label>Role</label>
             <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}>
               <option value="driver">Driver</option>
-              <option value="admin">Admin</option>
+              <option value="manager">Manager</option>
               <option value="caller">Caller</option>
+              <option value="admin">Admin</option>
             </select>
           </div>
           <div className="form-group">
@@ -2962,6 +2953,12 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
               Can drive manual transmission
             </label>
           </div>
+          {canSeePay && (
+            <div className="form-group">
+              <label>Hourly Wage ($)</label>
+              <input type="number" value={editForm.hourly_wage} onChange={(e) => setEditForm({ ...editForm, hourly_wage: e.target.value })} placeholder="0.00" step="0.25" />
+            </div>
+          )}
           <div className="form-group" style={{ gridColumn: "1 / -1" }}>
             <label>Update License Photo</label>
             <input type="file" accept="image/*" onChange={(e) => setLicenseFile(e.target.files[0])} />
@@ -3059,6 +3056,14 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
             <span className="detail-label">License Number:</span>
             <span className="detail-value">{driver.drivers_license_number || "—"}</span>
           </div>
+          {canSeePay && (
+            <div className="detail-row">
+              <span className="detail-label">Hourly Wage:</span>
+              <span className="detail-value" style={{ color: driver.hourly_wage ? "var(--accent)" : "var(--muted)" }}>
+                {driver.hourly_wage ? `$${Number(driver.hourly_wage).toFixed(2)}/hr` : "Not set"}
+              </span>
+            </div>
+          )}
           {driver.drivers_license_photo_url && (
             <div className="detail-row" style={{ flexDirection: "column", alignItems: "flex-start" }}>
               <span className="detail-label">License Photo:</span>
@@ -3089,7 +3094,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
   );
 }
 
-function ManageUsers({ allProfiles, setAllProfiles }) {
+function ManageUsers({ allProfiles, setAllProfiles, canSeePay }) {
   const [view, setView] = useState("list"); // list | add | view
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [form, setForm] = useState({
@@ -3101,6 +3106,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
     date_of_birth: "",
     can_drive_manual: false,
     drivers_license_number: "",
+    hourly_wage: "",
   });
   const [licenseFile, setLicenseFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -3186,6 +3192,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
         can_drive_manual: form.can_drive_manual,
         drivers_license_number: form.drivers_license_number || null,
         drivers_license_photo_url: licensePhotoUrl,
+        hourly_wage: form.hourly_wage ? Number(form.hourly_wage) : null,
       })
       .eq("id", newUserId);
 
@@ -3311,8 +3318,9 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
               onChange={(e) => setForm({ ...form, role: e.target.value })}
             >
               <option value="driver">Driver</option>
+              <option value="manager">Manager</option>
               <option value="caller">Caller (Read-Only)</option>
-              <option value="admin">Admin</option>
+              {canSeePay && <option value="admin">Admin</option>}
             </select>
           </div>
           <div className="form-group">
@@ -3352,6 +3360,18 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
               Can drive manual transmission (stick shift)
             </label>
           </div>
+          {canSeePay && (
+            <div className="form-group">
+              <label>Hourly Wage ($)</label>
+              <input
+                type="number"
+                value={form.hourly_wage}
+                onChange={(e) => setForm({ ...form, hourly_wage: e.target.value })}
+                placeholder="0.00"
+                step="0.25"
+              />
+            </div>
+          )}
           <div className="form-group" style={{ gridColumn: "1 / -1" }}>
             <label>Driver's License Photo</label>
             <input
@@ -3391,6 +3411,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
           setSelectedDriver(updated);
           setAllProfiles((prev) => prev.map((p) => p.id === updated.id ? updated : p));
         }}
+        canSeePay={canSeePay}
       />
     );
   }
@@ -3423,7 +3444,7 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
           </thead>
           <tbody>
             {[...allProfiles].sort((a, b) => {
-              const roleOrder = { admin: 0, caller: 1, driver: 2 };
+              const roleOrder = { admin: 0, manager: 1, caller: 2, driver: 3 };
               const roleA = roleOrder[a.role] ?? 3;
               const roleB = roleOrder[b.role] ?? 3;
               if (roleA !== roleB) return roleA - roleB;
@@ -3433,14 +3454,14 @@ function ManageUsers({ allProfiles, setAllProfiles }) {
                 <td style={{ fontWeight: 600 }}>{user.name}</td>
                 <td style={{ color: "var(--muted)", fontSize: 13 }}>{user.email || "—"}</td>
                 <td style={{ textTransform: "capitalize", whiteSpace: "nowrap" }}>
-                  {user.role === "admin" && <span style={{ color: "var(--accent)" }}>★ </span>}
+                  {(user.role === "admin" || user.role === "manager") && <span style={{ color: user.role === "admin" ? "var(--accent)" : "var(--accent2)" }}>{user.role === "admin" ? "★" : "◆"} </span>}
                   {user.role}
                 </td>
                 <td style={{ color: "var(--muted)", fontSize: 13, whiteSpace: "nowrap" }}>
                   {user.phone_number || "—"}
                 </td>
                 <td style={{ textAlign: "center" }}>
-                  {user.role === "driver" ? (
+                  {(user.role === "driver" || user.role === "manager") ? (
                     user.push_token
                       ? <span style={{ color: "var(--success)" }}>✓</span>
                       : <span style={{ color: "var(--danger)", fontWeight: 700, fontSize: 11 }}>OFF</span>
@@ -3487,8 +3508,9 @@ function AdminDashboard({
   onPrefillConsumed,
   onTabChange,
 }) {
-  const isAdmin = user.role === "admin";
-  const drivers = allProfiles.filter((u) => u.role === "driver");
+  const isAdmin = user.role === "admin" || user.role === "manager";
+  const canSeePay = user.role === "admin";
+  const drivers = allProfiles.filter((u) => u.role === "driver" || u.role === "manager");
 
   // URL ↔ tab sync
   const TAB_PATHS = {
@@ -3575,7 +3597,7 @@ function AdminDashboard({
   ].reduce((sum, v) => sum + (Number(v) || 0), 0);
 
   async function handleSubmit() {
-    if (!form.driver_id || !form.date || !form.pay) return;
+    if (!form.driver_id || !form.date || (canSeePay && !form.pay)) return;
     setSubmitting(true);
     const costFields = {
       flight_cost: form.flight_cost ? Number(form.flight_cost) : null,
@@ -3777,7 +3799,7 @@ function AdminDashboard({
                     {weekEntries.length} trips this week · {monthTrips} this
                     month
                   </div>
-                  <div className="driver-pay">{formatCurrency(weekPay)}</div>
+                  {canSeePay && <div className="driver-pay">{formatCurrency(weekPay)}</div>}
                   <div
                     style={{
                       fontSize: 11,
@@ -3829,17 +3851,19 @@ function AdminDashboard({
                     }
                   />
                 </div>
-                <div className="field">
-                  <label>Pay Amount ($) <span style={{ color: "var(--danger)" }}>*</span></label>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    value={form.pay}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, pay: e.target.value }))
-                    }
-                  />
-                </div>
+                {canSeePay && (
+                  <div className="field">
+                    <label>Pay Amount ($) <span style={{ color: "var(--danger)" }}>*</span></label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      value={form.pay}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, pay: e.target.value }))
+                      }
+                    />
+                  </div>
+                )}
                 <div className="field">
                   <label>Hours Worked</label>
                   <input
@@ -4141,7 +4165,7 @@ function AdminDashboard({
               <button
                 className="btn btn-primary"
                 style={{ padding: "10px 16px", fontSize: 12 }}
-                onClick={() => exportCSV(filteredEntries, allProfiles)}
+                onClick={() => exportCSV(filteredEntries, allProfiles, canSeePay)}
               >
                 ⬇ Export CSV
               </button>
@@ -4162,7 +4186,7 @@ function AdminDashboard({
                   <th>Date</th>
                   <th>City</th>
                   <th>Carpage ID</th>
-                  <th>Pay</th>
+                  {canSeePay && <th>Pay</th>}
                   <th>Hours</th>
                   <th>Miles</th>
                   <th>Recon</th>
@@ -4207,9 +4231,11 @@ function AdminDashboard({
                             e.crm_id
                           )}
                         </td>
-                        <td style={{ color: "var(--accent)", fontWeight: 600 }}>
-                          {formatCurrency(e.pay)}
-                        </td>
+                        {canSeePay && (
+                          <td style={{ color: "var(--accent)", fontWeight: 600 }}>
+                            {formatCurrency(e.pay)}
+                          </td>
+                        )}
                         <td>{e.hours}h</td>
                         <td style={{ color: "var(--muted)" }}>
                           {e.miles ?? 0} mi
@@ -4370,6 +4396,7 @@ function AdminDashboard({
         <ManageUsers
           allProfiles={allProfiles}
           setAllProfiles={setAllProfiles}
+          canSeePay={canSeePay}
         />
       )}
     </div>
@@ -4419,6 +4446,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
     notes: "",
     stock_numbers: "",
     destination_address: "",
+    aa_stock_numbers: {},
     aa_driver_ids: [],
   });
   const [saving, setSaving] = useState(false);
@@ -4532,7 +4560,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
         notes: form.notes || null,
         status: "pending",
         group_id: groupId,
-        stock_numbers: form.stock_numbers || null,
+        stock_numbers: (form.aa_stock_numbers || {})[driverId] || null,
         destination_address: form.destination_address || null,
       }));
 
@@ -4572,7 +4600,8 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
         carpage_link: "",
         notes: "",
         stock_numbers: "",
-        aa_driver_ids: [],
+        aa_stock_numbers: {},
+    aa_driver_ids: [],
       }));
       setTimeout(() => setSaved(false), 3000);
       return;
@@ -4650,7 +4679,8 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
       airport_driver_id: "",
       stock_numbers: "",
       destination_address: "",
-      aa_driver_ids: [],
+      aa_stock_numbers: {},
+    aa_driver_ids: [],
     }));
     setTimeout(() => setSaved(false), 3000);
   }
@@ -4813,16 +4843,25 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
           </div>
         )}
 
-        {/* ── AA: stock numbers ── */}
-        {form.trip_type === "aa" && (
+        {/* ── AA: per-driver stock numbers ── */}
+        {form.trip_type === "aa" && form.aa_driver_ids.length > 0 && (
           <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label>Stock Numbers</label>
-            <input
-              type="text"
-              placeholder="A123, B456, C789"
-              value={form.stock_numbers}
-              onChange={(e) => set("stock_numbers", e.target.value)}
-            />
+            <label>Stock Numbers (per driver)</label>
+            {form.aa_driver_ids.map((dId) => {
+              const d = drivers.find((dr) => dr.id === dId);
+              return (
+                <div key={dId} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, minWidth: 120, color: "var(--muted)" }}>{d?.name || "—"}</span>
+                  <input
+                    type="text"
+                    placeholder="AB123, AB124"
+                    value={(form.aa_stock_numbers || {})[dId] || ""}
+                    onChange={(e) => set("aa_stock_numbers", { ...(form.aa_stock_numbers || {}), [dId]: e.target.value })}
+                    style={{ flex: 1 }}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
         <div className="field">
@@ -5150,7 +5189,7 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
 }
 
 // ─── FINALIZE TRIP MODAL ──────────────────────────────────────────────────────
-function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
+function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose, canSeePay = true }) {
   const driver1 = allProfiles.find((p) => p.id === trip.driver_id);
   const driver2 = trip.second_driver_id
     ? allProfiles.find((p) => p.id === trip.second_driver_id)
@@ -5163,12 +5202,19 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
         ).toFixed(1)
       : "";
 
-  // $45 suggested pay for AA, Courier, and Airport trips
-  const suggestedPay = ["aa", "courier", "airport"].includes(trip.trip_type) ? "45" : "";
+  // Auto-fill pay: hourly_wage * hours if available, else $45 for AA/courier/airport
+  function calcPay(driver, hours) {
+    // AA, Courier, Airport always default to $45 flat
+    if (["aa", "courier", "airport"].includes(trip.trip_type)) return "45";
+    if (driver?.hourly_wage && hours) {
+      return (Number(driver.hourly_wage) * Number(hours)).toFixed(2);
+    }
+    return "";
+  }
 
   const [form, setForm] = useState({
-    pay: suggestedPay,
-    pay2: "",
+    pay: calcPay(driver1, duration),
+    pay2: driver2 ? calcPay(driver2, duration) : "",
     hours: duration,
     miles: String(trip.miles ?? ""),
     estimated_cost: String(trip.estimated_cost ?? ""),
@@ -5195,11 +5241,11 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
   ].reduce((sum, v) => sum + (Number(v) || 0), 0);
 
   async function handleFinalize() {
-    if (!form.pay) {
+    if (canSeePay && !form.pay) {
       setError("Pay is required.");
       return;
     }
-    if (driver2 && !form.pay2) {
+    if (canSeePay && driver2 && !form.pay2) {
       setError("Pay for both drivers is required.");
       return;
     }
@@ -5304,7 +5350,7 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
           </div>
         </div>
         {/* Speed Analytics */}
-        {trip.speed_data && trip.speed_data.top_speed > 0 && (
+        {false && trip.speed_data && trip.speed_data.top_speed > 0 && (
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, 1fr)",
@@ -5363,17 +5409,19 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose }) {
         )}
 
         <div className="form-grid">
-          <div className="field">
-            <label>Pay — {driver1?.name} ($)</label>
-            <input
-              type="number"
-              placeholder="0.00"
-              value={form.pay}
-              onChange={(e) => set("pay", e.target.value)}
-              autoFocus
-            />
-          </div>
-          {driver2 && (
+          {canSeePay && (
+            <div className="field">
+              <label>Pay — {driver1?.name} ($)</label>
+              <input
+                type="number"
+                placeholder="0.00"
+                value={form.pay}
+                onChange={(e) => set("pay", e.target.value)}
+                autoFocus
+              />
+            </div>
+          )}
+          {canSeePay && driver2 && (
             <div className="field">
               <label>Pay — {driver2?.name} ($)</label>
               <input
@@ -5608,10 +5656,10 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
         ? ((new Date(trip.actual_end) - new Date(trip.actual_start)) / 3600000).toFixed(1)
         : "",
       miles: String(trip.miles ?? ""),
+      stockNumbers: trip.stock_numbers || "",
+      fuelCost: "",
     })),
   );
-  const [stockNumbers, setStockNumbers] = useState(groupTrips[0]?.stock_numbers || "");
-  const [fuelCost, setFuelCost] = useState("");
   const [otherCost, setOtherCost] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -5621,7 +5669,8 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
   }
 
   const totalPay = driverForms.reduce((s, f) => s + (Number(f.pay) || 0), 0);
-  const computedActualCost = totalPay + (Number(fuelCost) || 0) + (Number(otherCost) || 0);
+  const totalFuel = driverForms.reduce((s, f) => s + (Number(f.fuelCost) || 0), 0);
+  const computedActualCost = totalPay + totalFuel + (Number(otherCost) || 0);
 
   async function handleFinalizeDriver(idx) {
     const df = driverForms[idx];
@@ -5630,10 +5679,7 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
     setError("");
 
     const trip = groupTrips.find((t) => t.id === df.tripId);
-    const costFields = {
-      fuel_cost: fuelCost ? Number(fuelCost) : null,
-      other_cost: otherCost ? Number(otherCost) : null,
-    };
+    const driverCost = Number(df.pay) + (Number(df.fuelCost) || 0) + (Number(otherCost) || 0);
 
     const { error: tripErr } = await supabase
       .from("trips")
@@ -5642,10 +5688,11 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
         pay: Number(df.pay),
         miles: df.miles ? Number(df.miles) : 0,
         hours: df.hours ? Number(df.hours) : 0,
-        stock_numbers: stockNumbers || null,
-        actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
+        stock_numbers: df.stockNumbers || null,
+        fuel_cost: df.fuelCost ? Number(df.fuelCost) : null,
+        other_cost: otherCost ? Number(otherCost) : null,
+        actual_cost: driverCost,
         estimated_cost: 0,
-        ...costFields,
       })
       .eq("id", df.tripId);
 
@@ -5661,11 +5708,12 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
       city: trip.city,
       crm_id: trip.crm_id,
       carpage_link: trip.carpage_link,
-      actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
+      actual_cost: driverCost,
       estimated_cost: 0,
       trip_type: "aa",
-      stock_numbers: stockNumbers || null,
-      ...costFields,
+      stock_numbers: df.stockNumbers || null,
+      fuel_cost: df.fuelCost ? Number(df.fuelCost) : null,
+      other_cost: otherCost ? Number(otherCost) : null,
     });
 
     setSaving(false);
@@ -5682,14 +5730,11 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
     setSaving(true);
     setError("");
 
-    const costFields = {
-      fuel_cost: fuelCost ? Number(fuelCost) : null,
-      other_cost: otherCost ? Number(otherCost) : null,
-    };
-
     for (const df of driverForms) {
       const trip = groupTrips.find((t) => t.id === df.tripId);
       if (trip.status === "finalized") continue;
+
+      const driverCost = Number(df.pay) + (Number(df.fuelCost) || 0) + (Number(otherCost) || 0);
 
       const { error: tripErr } = await supabase
         .from("trips")
@@ -5698,10 +5743,11 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
           pay: Number(df.pay),
           miles: df.miles ? Number(df.miles) : 0,
           hours: df.hours ? Number(df.hours) : 0,
-          stock_numbers: stockNumbers || null,
-          actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
+          stock_numbers: df.stockNumbers || null,
+          fuel_cost: df.fuelCost ? Number(df.fuelCost) : null,
+          other_cost: otherCost ? Number(otherCost) : null,
+          actual_cost: driverCost,
           estimated_cost: 0,
-          ...costFields,
         })
         .eq("id", df.tripId);
 
@@ -5717,11 +5763,12 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
         city: trip.city,
         crm_id: trip.crm_id,
         carpage_link: trip.carpage_link,
-        actual_cost: Number(df.pay) + (Number(fuelCost) || 0) + (Number(otherCost) || 0),
+        actual_cost: driverCost,
         estimated_cost: 0,
         trip_type: "aa",
-        stock_numbers: stockNumbers || null,
-        ...costFields,
+        stock_numbers: df.stockNumbers || null,
+        fuel_cost: df.fuelCost ? Number(df.fuelCost) : null,
+        other_cost: otherCost ? Number(otherCost) : null,
       });
     }
 
@@ -5742,20 +5789,9 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
           </div>
         </div>
 
-        {/* Stock Numbers — editable */}
-        <div className="field" style={{ marginBottom: 16 }}>
-          <label>Stock Numbers (editable)</label>
-          <input
-            type="text"
-            placeholder="A123, B456, C789"
-            value={stockNumbers}
-            onChange={(e) => setStockNumbers(e.target.value)}
-          />
-        </div>
-
-        {/* Per-driver pay section */}
+        {/* Per-driver section */}
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 8 }}>
-          DRIVER PAY
+          DRIVERS
         </div>
         {driverForms.map((df, idx) => {
           const driver = allProfiles.find((p) => p.id === df.driverId);
@@ -5789,50 +5825,65 @@ function AAGroupFinalizeModal({ groupTrips, allProfiles, onFinalized, onClose })
                 )}
               </div>
               {!isFinalized && (
-                <div className="form-grid" style={{ gap: 8 }}>
-                  <div className="field" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: 11 }}>Pay ($)</label>
+                <>
+                  <div className="field" style={{ marginBottom: 6 }}>
+                    <label style={{ fontSize: 11 }}>Stock Numbers</label>
                     <input
-                      type="number"
-                      placeholder="45.00"
-                      value={df.pay}
-                      onChange={(e) => setDriverField(idx, "pay", e.target.value)}
+                      type="text"
+                      placeholder="AB123, AB124"
+                      value={df.stockNumbers}
+                      onChange={(e) => setDriverField(idx, "stockNumbers", e.target.value)}
                     />
                   </div>
-                  <div className="field" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: 11 }}>Hours</label>
-                    <input
-                      type="number"
-                      placeholder="0"
-                      value={df.hours}
-                      onChange={(e) => setDriverField(idx, "hours", e.target.value)}
-                    />
+                  <div className="form-grid" style={{ gap: 8 }}>
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: 11 }}>Pay ($)</label>
+                      <input
+                        type="number"
+                        placeholder="45.00"
+                        value={df.pay}
+                        onChange={(e) => setDriverField(idx, "pay", e.target.value)}
+                      />
+                    </div>
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: 11 }}>Gas ($)</label>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        value={df.fuelCost}
+                        onChange={(e) => setDriverField(idx, "fuelCost", e.target.value)}
+                      />
+                    </div>
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: 11 }}>Hours</label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={df.hours}
+                        onChange={(e) => setDriverField(idx, "hours", e.target.value)}
+                      />
+                    </div>
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: 11 }}>Miles</label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={df.miles}
+                        onChange={(e) => setDriverField(idx, "miles", e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div className="field" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: 11 }}>Miles</label>
-                    <input
-                      type="number"
-                      placeholder="0"
-                      value={df.miles}
-                      onChange={(e) => setDriverField(idx, "miles", e.target.value)}
-                    />
-                  </div>
-                </div>
+                </>
               )}
             </div>
           );
         })}
 
-        {/* Shared cost breakdown */}
+        {/* Other shared costs */}
         <div style={{ marginTop: 16, padding: "12px 14px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 10 }}>SHARED COSTS</div>
           <div className="form-grid">
             <div className="field">
-              <label>Fuel ($)</label>
-              <input type="number" placeholder="0.00" value={fuelCost} onChange={(e) => setFuelCost(e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Other Expenses ($)</label>
+              <label>Other Shared Expenses ($)</label>
               <input type="number" placeholder="0.00" value={otherCost} onChange={(e) => setOtherCost(e.target.value)} />
             </div>
           </div>
@@ -5992,6 +6043,7 @@ function AdminTrips({
           allProfiles={allProfiles}
           onFinalized={handleFinalized}
           onClose={() => setFinalizingTrip(null)}
+          canSeePay={canSeePay}
         />
       )}
       {finalizingAAGroup && (
@@ -6111,36 +6163,15 @@ function AdminTrips({
                           <td style={{ fontWeight: 600 }}>
                             <span style={{ color: "var(--accent)", marginRight: 6 }}>{expanded ? "▼" : "▶"}</span>
                             {label} <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 12 }}>({groupTrips.length} drivers)</span>
-                            {/* Stock numbers inline-editable under group name */}
-                            <div style={{ marginTop: 2, fontSize: 11, fontWeight: 400 }} onClick={(e) => e.stopPropagation()}>
-                              {editingStockNumbers === group_id ? (
-                                <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                                  <input
-                                    type="text"
-                                    value={stockNumberDraft}
-                                    onChange={(e) => setStockNumberDraft(e.target.value)}
-                                    style={{ fontSize: 11, padding: "2px 6px", width: 180 }}
-                                    autoFocus
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") handleSaveStockNumbers(group_id, stockNumberDraft);
-                                      if (e.key === "Escape") setEditingStockNumbers(null);
-                                    }}
-                                  />
-                                  <button className="btn-edit" style={{ fontSize: 10, padding: "2px 6px" }} onClick={() => handleSaveStockNumbers(group_id, stockNumberDraft)}>Save</button>
-                                </span>
-                              ) : (
-                                <span
-                                  onClick={() => {
-                                    setEditingStockNumbers(group_id);
-                                    setStockNumberDraft(groupTrips[0]?.stock_numbers || "");
-                                  }}
-                                  style={{ cursor: "pointer", color: "var(--muted)", borderBottom: "1px dashed var(--border)" }}
-                                  title="Click to edit stock numbers"
-                                >
-                                  {groupTrips[0]?.stock_numbers ? `Stock: ${groupTrips[0].stock_numbers}` : "+ Add stock numbers"}
-                                </span>
-                              )}
-                            </div>
+                            {/* Stock numbers summary (per-driver, shown aggregated) */}
+                            {(() => {
+                              const allStocks = groupTrips.map(t => t.stock_numbers).filter(Boolean).join(", ");
+                              return allStocks ? (
+                                <div style={{ marginTop: 2, fontSize: 11, fontWeight: 400, color: "var(--muted)" }}>
+                                  Stock: {allStocks}
+                                </div>
+                              ) : null;
+                            })()}
                           </td>
                           <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--muted)" }}>{groupTrips[0]?.crm_id}</td>
                           <td>{groupTrips[0]?.city}</td>
@@ -7527,7 +7558,7 @@ export default function App() {
   }
 
   const driverEntries = user?.role === "driver" ? entries : [];
-  const showAdminDashboard = user?.role === "admin" || user?.role === "caller";
+  const showAdminDashboard = ["admin", "manager", "caller"].includes(user?.role);
 
   return (
     <div className="app">

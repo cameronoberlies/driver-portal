@@ -5,7 +5,7 @@ module.exports = defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',
-    port: 3000,
+    port: 3001,
   },
   test: {
     environment: 'jsdom',

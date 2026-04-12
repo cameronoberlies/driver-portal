@@ -178,19 +178,20 @@ export const CSV_HEADERS = [
   "Stock Numbers", "Recon Missed", "Turned Down", "Additional Recon Cost",
 ];
 
-export function buildCSVContent(entries, profiles) {
+export function buildCSVContent(entries, profiles, canSeePay = true) {
+  const headers = canSeePay ? CSV_HEADERS : CSV_HEADERS.filter(h => h !== "Pay");
   const rows = [...entries]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map(e => {
       const driver = profiles.find(p => p.id === e.driver_id);
-      return [
+      const row = [
         driver?.name ?? "",
         e.date,
         e.city,
         e.trip_type ?? "",
         e.crm_id,
         e.carpage_link ?? "",
-        e.pay,
+        ...(canSeePay ? [e.pay] : []),
         e.hours,
         e.miles ?? 0,
         e.flight_cost ?? "",
@@ -204,6 +205,7 @@ export function buildCSVContent(entries, profiles) {
         e.turned_down ? "Yes" : "No",
         e.additional_recon_cost ?? "",
       ];
+      return row;
     });
-  return [CSV_HEADERS, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+  return [headers, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n");
 }
