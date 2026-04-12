@@ -3793,8 +3793,10 @@ function AdminDashboard({
                   <div className="driver-name">
                     {d.name}
                     {d.willing_to_fly && <span style={{ color: "var(--accent)", marginLeft: 8, fontSize: 12, fontWeight: 700 }}>(F)</span>}
-                    {!d.push_token && <span style={{ color: "var(--danger)", marginLeft: 8, fontSize: 10, fontWeight: 700 }}>NOTIFICATIONS OFF</span>}
                   </div>
+                  {!d.push_token && (
+                    <div style={{ color: "var(--danger)", fontSize: 10, fontWeight: 700, marginTop: 2 }}>NOTIFICATIONS OFF</div>
+                  )}
                   <div className="driver-meta">
                     {weekEntries.length} trips this week · {monthTrips} this
                     month
