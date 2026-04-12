@@ -210,6 +210,7 @@ const css = `
   }
   .modal {
     background: var(--surface); border: 1px solid var(--border); width: 500px; max-width: 95vw;
+    max-height: 90vh; overflow-y: auto;
     padding: 32px; position: relative; box-shadow: var(--shadow-lg); animation: fadeUp 0.2s ease;
     border-radius: var(--radius-lg);
   }
@@ -273,7 +274,7 @@ const css = `
   .driver-meta { font-size: 12px; color: var(--muted); margin-top: 6px; letter-spacing: 0.2px; }
   .driver-pay { font-family: var(--font-head); font-size: 28px; font-weight: 800; color: var(--accent); margin-top: 14px; }
 
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   .fade-in { animation: fadeUp 0.3s ease both; }
   .fade-in-1 { animation-delay: 0.05s; }
@@ -6045,7 +6046,7 @@ function AdminTrips({
   }
 
   return (
-    <div className="fade-in">
+    <div>
       {finalizingTrip && (
         <FinalizeTripModal
           trip={finalizingTrip}
