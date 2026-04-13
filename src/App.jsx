@@ -3517,7 +3517,7 @@ function ChaseVehicles() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("list"); // list | add
   const [editingVehicle, setEditingVehicle] = useState(null);
-  const [form, setForm] = useState({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "", last_oil_change: "" });
+  const [form, setForm] = useState({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "", last_oil_change: "", last_oil_change_mileage: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [expandedVehicle, setExpandedVehicle] = useState(null);
@@ -3542,7 +3542,7 @@ function ChaseVehicles() {
   }
 
   function resetForm() {
-    setForm({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "", last_oil_change: "" });
+    setForm({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "", last_oil_change: "", last_oil_change_mileage: "" });
     setError("");
   }
 
@@ -3563,6 +3563,7 @@ function ChaseVehicles() {
           current_mileage: form.current_mileage ? Number(form.current_mileage) : 0,
           notes: form.notes || null,
           last_oil_change: form.last_oil_change || null,
+          last_oil_change_mileage: form.last_oil_change_mileage ? Number(form.last_oil_change_mileage) : null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", editingVehicle.id);
@@ -3579,6 +3580,7 @@ function ChaseVehicles() {
           current_mileage: form.current_mileage ? Number(form.current_mileage) : 0,
           notes: form.notes || null,
           last_oil_change: form.last_oil_change || null,
+          last_oil_change_mileage: form.last_oil_change_mileage ? Number(form.last_oil_change_mileage) : null,
         });
       if (err) { setError(err.message); setSaving(false); return; }
     }
@@ -3636,6 +3638,10 @@ function ChaseVehicles() {
             <label>Last Oil Change</label>
             <input type="date" value={form.last_oil_change} onChange={(e) => setForm({ ...form, last_oil_change: e.target.value })} />
           </div>
+          <div className="field">
+            <label>Mileage at Oil Change</label>
+            <input type="number" value={form.last_oil_change_mileage} onChange={(e) => setForm({ ...form, last_oil_change_mileage: e.target.value })} placeholder="42000" />
+          </div>
           <div className="field" style={{ gridColumn: "1 / -1" }}>
             <label>Notes</label>
             <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Any notes..." />
@@ -3686,7 +3692,7 @@ function ChaseVehicles() {
                   <td>{v.year} {v.make} {v.model}</td>
                   <td style={{ fontSize: 11, color: "var(--muted)", fontFamily: "monospace" }}>{v.vin || "—"}</td>
                   <td style={{ fontWeight: 600 }}>{Number(v.current_mileage || 0).toLocaleString()} mi</td>
-                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{v.last_oil_change || "—"}</td>
+                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{v.last_oil_change ? `${v.last_oil_change}${v.last_oil_change_mileage ? ` @ ${Number(v.last_oil_change_mileage).toLocaleString()} mi` : ""}` : "—"}</td>
                   <td>
                     <select
                       value={v.status}
@@ -3722,6 +3728,7 @@ function ChaseVehicles() {
                           current_mileage: v.current_mileage ? String(v.current_mileage) : "",
                           notes: v.notes || "",
                           last_oil_change: v.last_oil_change || "",
+                          last_oil_change_mileage: v.last_oil_change_mileage ? String(v.last_oil_change_mileage) : "",
                         });
                       }}
                     >
