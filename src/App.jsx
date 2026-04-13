@@ -3500,6 +3500,269 @@ function ManageUsers({ allProfiles, setAllProfiles, canSeePay }) {
   );
 }
 
+// ─── CHASE VEHICLES (FLEET) ───────────────────────────────────────────────────
+function ChaseVehicles() {
+  const [vehicles, setVehicles] = useState([]);
+  const [mileageLogs, setMileageLogs] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState("list"); // list | add
+  const [editingVehicle, setEditingVehicle] = useState(null);
+  const [form, setForm] = useState({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [expandedVehicle, setExpandedVehicle] = useState(null);
+
+  useEffect(() => { load(); }, []);
+
+  async function load() {
+    const { data } = await supabase.from("chase_vehicles").select("*").order("stock_number");
+    setVehicles(data || []);
+    setLoading(false);
+  }
+
+  async function loadMileageLog(vehicleId) {
+    if (mileageLogs[vehicleId]) return;
+    const { data } = await supabase
+      .from("chase_vehicle_mileage_log")
+      .select("*")
+      .eq("vehicle_id", vehicleId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setMileageLogs((prev) => ({ ...prev, [vehicleId]: data || [] }));
+  }
+
+  function resetForm() {
+    setForm({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "" });
+    setError("");
+  }
+
+  async function handleSave() {
+    if (!form.stock_number) { setError("Stock number is required"); return; }
+    setSaving(true);
+    setError("");
+
+    if (editingVehicle) {
+      const { error: err } = await supabase
+        .from("chase_vehicles")
+        .update({
+          stock_number: form.stock_number,
+          vin: form.vin || null,
+          year: form.year ? Number(form.year) : null,
+          make: form.make || null,
+          model: form.model || null,
+          current_mileage: form.current_mileage ? Number(form.current_mileage) : 0,
+          notes: form.notes || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", editingVehicle.id);
+      if (err) { setError(err.message); setSaving(false); return; }
+    } else {
+      const { error: err } = await supabase
+        .from("chase_vehicles")
+        .insert({
+          stock_number: form.stock_number,
+          vin: form.vin || null,
+          year: form.year ? Number(form.year) : null,
+          make: form.make || null,
+          model: form.model || null,
+          current_mileage: form.current_mileage ? Number(form.current_mileage) : 0,
+          notes: form.notes || null,
+        });
+      if (err) { setError(err.message); setSaving(false); return; }
+    }
+
+    setSaving(false);
+    setEditingVehicle(null);
+    setView("list");
+    resetForm();
+    load();
+  }
+
+  async function handleDelete(vehicle) {
+    if (!confirm(`Delete ${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.stock_number})?`)) return;
+    await supabase.from("chase_vehicles").delete().eq("id", vehicle.id);
+    load();
+  }
+
+  async function handleStatusChange(vehicle, newStatus) {
+    await supabase.from("chase_vehicles").update({ status: newStatus, updated_at: new Date().toISOString() }).eq("id", vehicle.id);
+    load();
+  }
+
+  if (loading) return <div style={{ padding: 40, color: "var(--muted)" }}>Loading fleet...</div>;
+
+  if (view === "add" || editingVehicle) {
+    return (
+      <div className="form-card fade-in">
+        <div className="form-card-title">{editingVehicle ? "Edit Vehicle" : "Add Chase Vehicle"}</div>
+        <div className="form-grid">
+          <div className="field">
+            <label>Stock Number *</label>
+            <input value={form.stock_number} onChange={(e) => setForm({ ...form, stock_number: e.target.value })} placeholder="STK-001" />
+          </div>
+          <div className="field">
+            <label>VIN</label>
+            <input value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value })} placeholder="1HGCM82633A004352" />
+          </div>
+          <div className="field">
+            <label>Year</label>
+            <input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} placeholder="2024" />
+          </div>
+          <div className="field">
+            <label>Make</label>
+            <input value={form.make} onChange={(e) => setForm({ ...form, make: e.target.value })} placeholder="Toyota" />
+          </div>
+          <div className="field">
+            <label>Model</label>
+            <input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} placeholder="Camry" />
+          </div>
+          <div className="field">
+            <label>Current Mileage</label>
+            <input type="number" value={form.current_mileage} onChange={(e) => setForm({ ...form, current_mileage: e.target.value })} placeholder="45000" />
+          </div>
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label>Notes</label>
+            <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Any notes..." />
+          </div>
+        </div>
+        {error && <div className="error-msg" style={{ marginTop: 8 }}>{error}</div>}
+        <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : editingVehicle ? "Save Changes →" : "Add Vehicle →"}
+          </button>
+          <button className="btn btn-ghost" onClick={() => { setView("list"); setEditingVehicle(null); resetForm(); }}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
+  const activeVehicles = vehicles.filter((v) => v.status === "active");
+  const inactiveVehicles = vehicles.filter((v) => v.status !== "active");
+
+  return (
+    <div className="fade-in">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>FLEET</div>
+          <div style={{ fontSize: 14, color: "var(--muted)" }}>{activeVehicles.length} active vehicle{activeVehicles.length !== 1 ? "s" : ""}</div>
+        </div>
+        <button className="btn btn-primary" onClick={() => { resetForm(); setView("add"); }}>+ Add Vehicle</button>
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Stock #</th>
+              <th>Vehicle</th>
+              <th>VIN</th>
+              <th>Mileage</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {vehicles.map((v) => (
+              <Fragment key={v.id}>
+                <tr style={{ opacity: v.status !== "active" ? 0.5 : 1 }}>
+                  <td style={{ fontWeight: 700, fontFamily: "monospace" }}>{v.stock_number}</td>
+                  <td>{v.year} {v.make} {v.model}</td>
+                  <td style={{ fontSize: 11, color: "var(--muted)", fontFamily: "monospace" }}>{v.vin || "—"}</td>
+                  <td style={{ fontWeight: 600 }}>{Number(v.current_mileage || 0).toLocaleString()} mi</td>
+                  <td>
+                    <select
+                      value={v.status}
+                      onChange={(e) => handleStatusChange(v, e.target.value)}
+                      style={{ fontSize: 11, padding: "3px 6px", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 4 }}
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="sold">Sold</option>
+                    </select>
+                  </td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button
+                      className="btn-edit"
+                      onClick={() => {
+                        setExpandedVehicle(expandedVehicle === v.id ? null : v.id);
+                        loadMileageLog(v.id);
+                      }}
+                    >
+                      {expandedVehicle === v.id ? "Hide Log" : "Mileage Log"}
+                    </button>
+                    <button
+                      className="btn-edit"
+                      style={{ background: "rgba(245,166,35,0.1)", color: "var(--accent)", borderColor: "var(--accent)" }}
+                      onClick={() => {
+                        setEditingVehicle(v);
+                        setForm({
+                          stock_number: v.stock_number || "",
+                          vin: v.vin || "",
+                          year: v.year ? String(v.year) : "",
+                          make: v.make || "",
+                          model: v.model || "",
+                          current_mileage: v.current_mileage ? String(v.current_mileage) : "",
+                          notes: v.notes || "",
+                        });
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn-edit"
+                      style={{ background: "rgba(232,90,74,0.1)", color: "var(--danger)", borderColor: "var(--danger)" }}
+                      onClick={() => handleDelete(v)}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+                {expandedVehicle === v.id && (
+                  <tr>
+                    <td colSpan="6" style={{ padding: "12px 20px", background: "var(--bg)" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 8 }}>MILEAGE LOG</div>
+                      {(mileageLogs[v.id] || []).length === 0 ? (
+                        <div style={{ fontSize: 12, color: "var(--muted)" }}>No trips recorded for this vehicle yet.</div>
+                      ) : (
+                        <table style={{ width: "100%", fontSize: 12 }}>
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign: "left", fontSize: 10 }}>Date</th>
+                              <th style={{ textAlign: "left", fontSize: 10 }}>City</th>
+                              <th style={{ textAlign: "left", fontSize: 10 }}>Driver</th>
+                              <th style={{ textAlign: "right", fontSize: 10 }}>Miles Added</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(mileageLogs[v.id] || []).map((log) => (
+                              <tr key={log.id}>
+                                <td style={{ color: "var(--muted)" }}>{log.trip_date || "—"}</td>
+                                <td>{log.trip_city || "—"}</td>
+                                <td>{log.driver_name || "—"}</td>
+                                <td style={{ textAlign: "right", fontWeight: 600, color: "var(--accent)" }}>+{Number(log.miles_added).toFixed(1)} mi</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {vehicles.length === 0 && (
+        <div style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>
+          No chase vehicles added yet. Click "Add Vehicle" to get started.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
 function AdminDashboard({
   user,
@@ -3525,7 +3788,7 @@ function AdminDashboard({
     "live drivers": "/livedrivers", "manage users": "/manageusers",
     "pickup calculator": "/pickupcalculator", "downloads": "/downloads",
     "my trips": "/mytrips", "weekly report": "/weeklyreport",
-    "monthly report": "/monthlyreport",
+    "monthly report": "/monthlyreport", "fleet": "/fleet",
   };
   const PATH_TO_TAB = Object.fromEntries(
     Object.entries(TAB_PATHS).map(([k, v]) => [v, k])
@@ -3733,6 +3996,7 @@ function AdminDashboard({
           { key: "capacity", icon: "📋", label: "Capacity" },
           { key: "live drivers", icon: "📍", label: "Live Drivers" },
           isAdmin && { key: "manage users", icon: "👥", label: "Manage Users" },
+          isAdmin && { key: "fleet", icon: "🚙", label: "Fleet" },
           { key: "pickup calculator", icon: "🧮", label: "Pickup Calc" },
           { key: "downloads", icon: "⬇", label: "Downloads" },
         ].filter(Boolean).map((t) => (
@@ -4098,7 +4362,7 @@ function AdminDashboard({
                   onChange={(e) => setFilterDriver(e.target.value)}
                 >
                   <option value="all">All Drivers</option>
-                  {drivers.map((d) => (
+                  {[...drivers].sort((a, b) => (a.name || "").localeCompare(b.name || "")).map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}{d.willing_to_fly ? ' (F)' : ''}
                     </option>
@@ -4407,6 +4671,8 @@ function AdminDashboard({
           canSeePay={canSeePay}
         />
       )}
+
+      {tab === "fleet" && <ChaseVehicles />}
     </div>
   );
 }
@@ -4454,6 +4720,8 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
     notes: "",
     stock_numbers: "",
     destination_address: "",
+    dealer_plate: "",
+    chase_vehicle_stock: "",
     aa_stock_numbers: {},
     aa_driver_ids: [],
   });
@@ -4570,6 +4838,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
         group_id: groupId,
         stock_numbers: (form.aa_stock_numbers || {})[driverId] || null,
         destination_address: form.destination_address || null,
+        dealer_plate: form.dealer_plate || null,
       }));
 
       const { data, error: err } = await supabase
@@ -4687,6 +4956,8 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
       airport_driver_id: "",
       stock_numbers: "",
       destination_address: "",
+      dealer_plate: "",
+      chase_vehicle_stock: "",
       aa_stock_numbers: {},
     aa_driver_ids: [],
     }));
@@ -4890,6 +5161,26 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
             onChange={(e) => set("crm_id", e.target.value)}
           />
         </div>
+        <div className="field">
+          <label>Dealer Plate #</label>
+          <input
+            type="text"
+            placeholder="D-1234"
+            value={form.dealer_plate}
+            onChange={(e) => set("dealer_plate", e.target.value)}
+          />
+        </div>
+        {form.trip_type === "drive" && (
+          <div className="field">
+            <label>Chase Vehicle Stock #</label>
+            <input
+              type="text"
+              placeholder="STK-001"
+              value={form.chase_vehicle_stock}
+              onChange={(e) => set("chase_vehicle_stock", e.target.value)}
+            />
+          </div>
+        )}
         <div className="field" style={{ gridColumn: "1 / -1", position: "relative" }}>
           <label>Pickup Address</label>
           <input
@@ -5197,6 +5488,87 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
 }
 
 // ─── FINALIZE TRIP MODAL ──────────────────────────────────────────────────────
+// ─── VEHICLE PHOTOS MODAL ─────────────────────────────────────────────────────
+function VehiclePhotosModal({ tripId, tripLabel, onClose }) {
+  const [photos, setPhotos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase
+        .from("vehicle_photos")
+        .select("*")
+        .eq("trip_id", tripId)
+        .order("created_at", { ascending: true });
+      setPhotos(data || []);
+      setLoading(false);
+    }
+    load();
+  }, [tripId]);
+
+  function getPhotoUrl(storagePath) {
+    const { data } = supabase.storage.from("vehicle-photos").getPublicUrl(storagePath);
+    return data?.publicUrl;
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 700, maxHeight: "85vh", overflow: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div>
+            <div className="modal-title" style={{ marginBottom: 4 }}>Vehicle Photos</div>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>{tripLabel}</div>
+          </div>
+          <button className="btn btn-ghost" style={{ padding: "6px 16px", fontSize: 11 }} onClick={onClose}>CLOSE</button>
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Loading photos...</div>
+        ) : photos.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>No photos uploaded for this trip.</div>
+        ) : (
+          <>
+            {selectedPhoto && (
+              <div style={{ marginBottom: 16, textAlign: "center" }}>
+                <img
+                  src={getPhotoUrl(selectedPhoto.storage_path)}
+                  alt="Vehicle"
+                  style={{ maxWidth: "100%", maxHeight: "50vh", borderRadius: 8, border: "1px solid var(--border)" }}
+                />
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
+                  {new Date(selectedPhoto.created_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}
+                </div>
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8 }}>
+              {photos.map((photo) => (
+                <div
+                  key={photo.id}
+                  onClick={() => setSelectedPhoto(photo)}
+                  style={{
+                    cursor: "pointer",
+                    borderRadius: 6,
+                    overflow: "hidden",
+                    border: selectedPhoto?.id === photo.id ? "2px solid var(--accent)" : "1px solid var(--border)",
+                    aspectRatio: "1",
+                  }}
+                >
+                  <img
+                    src={getPhotoUrl(photo.storage_path)}
+                    alt="Vehicle"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose, canSeePay = true }) {
   const driver1 = allProfiles.find((p) => p.id === trip.driver_id);
   const driver2 = trip.second_driver_id
@@ -5344,6 +5716,30 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose, canSeePay 
         driver_id: trip.second_driver_id,
         pay: Number(form.pay2),
       });
+    }
+
+    // Add trip miles to chase vehicle if assigned
+    if (trip.chase_vehicle_stock && form.miles) {
+      const { data: chaseVehicle } = await supabase
+        .from("chase_vehicles")
+        .select("id, current_mileage")
+        .eq("stock_number", trip.chase_vehicle_stock)
+        .single();
+      if (chaseVehicle) {
+        const tripMiles = Number(form.miles) || 0;
+        await supabase.from("chase_vehicles").update({
+          current_mileage: Number(chaseVehicle.current_mileage || 0) + tripMiles,
+          updated_at: new Date().toISOString(),
+        }).eq("id", chaseVehicle.id);
+        await supabase.from("chase_vehicle_mileage_log").insert({
+          vehicle_id: chaseVehicle.id,
+          trip_id: trip.id,
+          miles_added: tripMiles,
+          trip_city: trip.city,
+          trip_date: (trip.actual_end ? new Date(trip.actual_end) : new Date()).toISOString().slice(0, 10),
+          driver_name: driver1?.name || "Unknown",
+        });
+      }
     }
 
     setSaving(false);
@@ -5962,7 +6358,21 @@ function AdminTrips({
   const [acting, setActing] = useState(null); // trip id being acted on
   const [expandedGroups, setExpandedGroups] = useState({}); // group_id -> bool
   const [editingStockNumbers, setEditingStockNumbers] = useState(null); // group_id
+  const [viewingPhotos, setViewingPhotos] = useState(null); // { tripId, label }
+  const [photoCounts, setPhotoCounts] = useState({});
   const [stockNumberDraft, setStockNumberDraft] = useState("");
+
+  // Load photo counts for trips
+  useEffect(() => {
+    async function loadPhotoCounts() {
+      const { data } = await supabase.from("vehicle_photos").select("trip_id");
+      if (!data) return;
+      const counts = {};
+      data.forEach((p) => { counts[p.trip_id] = (counts[p.trip_id] || 0) + 1; });
+      setPhotoCounts(counts);
+    }
+    loadPhotoCounts();
+  }, [trips]);
 
   async function handleEndTrip(trip) {
     setActing(trip.id);
@@ -6094,6 +6504,13 @@ function AdminTrips({
             );
           }}
           onClose={() => setFinalizingAAGroup(null)}
+        />
+      )}
+      {viewingPhotos && (
+        <VehiclePhotosModal
+          tripId={viewingPhotos.tripId}
+          tripLabel={viewingPhotos.label}
+          onClose={() => setViewingPhotos(null)}
         />
       )}
       {editingTrip && (
@@ -6404,6 +6821,19 @@ function AdminTrips({
                             onClick={() => setFinalizingTrip(trip)}
                           >
                             Finalize
+                          </button>
+                        )}
+                        {photoCounts[trip.id] > 0 && (
+                          <button
+                            className="btn-edit"
+                            style={{
+                              background: "rgba(59,130,246,0.1)",
+                              color: "#3b82f6",
+                              borderColor: "#3b82f6",
+                            }}
+                            onClick={() => setViewingPhotos({ tripId: trip.id, label: `${trip.crm_id || ""} — ${trip.city}` })}
+                          >
+                            Photos ({photoCounts[trip.id]})
                           </button>
                         )}
                       </td>

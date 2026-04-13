@@ -143,12 +143,14 @@ export function buildTripPayload(form) {
     scheduled_pickup: new Date(form.scheduled_pickup).toISOString(),
     notes: form.notes || null,
     destination_address: form.destination_address || null,
+    dealer_plate: form.dealer_plate || null,
     status: "pending",
   };
 
   if (form.trip_type === "drive") {
     return {
       ...base,
+      chase_vehicle_stock: form.chase_vehicle_stock || null,
       driver_id: form.driver_id,
       second_driver_id: form.second_driver_id,
       designated_driver_id: form.designated_driver_id || form.driver_id,
