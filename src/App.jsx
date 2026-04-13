@@ -3850,6 +3850,8 @@ function AdminDashboard({
     carpage_link: "",
     trip_type: "",
     stock_numbers: "",
+    dealer_plate: "",
+    chase_vehicle_stock: "",
     recon_missed: false,
   });
 
@@ -3910,6 +3912,8 @@ function AdminDashboard({
         carpage_link: "",
         trip_type: "",
         stock_numbers: "",
+        dealer_plate: "",
+        chase_vehicle_stock: "",
         recon_missed: false,
       }));
       setSaved(true);
@@ -4195,6 +4199,30 @@ function AdminDashboard({
                     }
                   />
                 </div>
+                <div className="field">
+                  <label>Dealer Plate #</label>
+                  <input
+                    type="text"
+                    placeholder="D-1234"
+                    value={form.dealer_plate}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, dealer_plate: e.target.value }))
+                    }
+                  />
+                </div>
+                {form.trip_type === "drive" && (
+                  <div className="field">
+                    <label>Chase Vehicle Stock #</label>
+                    <input
+                      type="text"
+                      placeholder="STK-001"
+                      value={form.chase_vehicle_stock}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, chase_vehicle_stock: e.target.value }))
+                      }
+                    />
+                  </div>
+                )}
                 <div className="field">
                   <label>Estimated Cost ($)</label>
                   <input
