@@ -3517,7 +3517,7 @@ function ChaseVehicles() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("list"); // list | add
   const [editingVehicle, setEditingVehicle] = useState(null);
-  const [form, setForm] = useState({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "", last_oil_change: "", last_oil_change_mileage: "" });
+  const [form, setForm] = useState({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "", oil_change_due_mileage: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [expandedVehicle, setExpandedVehicle] = useState(null);
@@ -3542,7 +3542,7 @@ function ChaseVehicles() {
   }
 
   function resetForm() {
-    setForm({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "", last_oil_change: "", last_oil_change_mileage: "" });
+    setForm({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "", oil_change_due_mileage: "" });
     setError("");
   }
 
@@ -3562,8 +3562,7 @@ function ChaseVehicles() {
           model: form.model || null,
           current_mileage: form.current_mileage ? Number(form.current_mileage) : 0,
           notes: form.notes || null,
-          last_oil_change: form.last_oil_change || null,
-          last_oil_change_mileage: form.last_oil_change_mileage ? Number(form.last_oil_change_mileage) : null,
+          oil_change_due_mileage: form.oil_change_due_mileage ? Number(form.oil_change_due_mileage) : null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", editingVehicle.id);
@@ -3579,8 +3578,7 @@ function ChaseVehicles() {
           model: form.model || null,
           current_mileage: form.current_mileage ? Number(form.current_mileage) : 0,
           notes: form.notes || null,
-          last_oil_change: form.last_oil_change || null,
-          last_oil_change_mileage: form.last_oil_change_mileage ? Number(form.last_oil_change_mileage) : null,
+          oil_change_due_mileage: form.oil_change_due_mileage ? Number(form.oil_change_due_mileage) : null,
         });
       if (err) { setError(err.message); setSaving(false); return; }
     }
@@ -3635,12 +3633,8 @@ function ChaseVehicles() {
             <input type="number" value={form.current_mileage} onChange={(e) => setForm({ ...form, current_mileage: e.target.value })} placeholder="45000" />
           </div>
           <div className="field">
-            <label>Last Oil Change</label>
-            <input type="date" value={form.last_oil_change} onChange={(e) => setForm({ ...form, last_oil_change: e.target.value })} />
-          </div>
-          <div className="field">
-            <label>Mileage at Oil Change</label>
-            <input type="number" value={form.last_oil_change_mileage} onChange={(e) => setForm({ ...form, last_oil_change_mileage: e.target.value })} placeholder="42000" />
+            <label>Oil Change Due (miles)</label>
+            <input type="number" value={form.oil_change_due_mileage} onChange={(e) => setForm({ ...form, oil_change_due_mileage: e.target.value })} placeholder="9941" />
           </div>
           <div className="field" style={{ gridColumn: "1 / -1" }}>
             <label>Notes</label>
@@ -3679,7 +3673,7 @@ function ChaseVehicles() {
               <th>Vehicle</th>
               <th>VIN</th>
               <th>Mileage</th>
-              <th>Last Oil Change</th>
+              <th>Oil Change Due</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -3692,7 +3686,7 @@ function ChaseVehicles() {
                   <td>{v.year} {v.make} {v.model}</td>
                   <td style={{ fontSize: 11, color: "var(--muted)", fontFamily: "monospace" }}>{v.vin || "—"}</td>
                   <td style={{ fontWeight: 600 }}>{Number(v.current_mileage || 0).toLocaleString()} mi</td>
-                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{v.last_oil_change ? `${v.last_oil_change}${v.last_oil_change_mileage ? ` @ ${Number(v.last_oil_change_mileage).toLocaleString()} mi` : ""}` : "—"}</td>
+                  <td style={{ fontSize: 12, color: v.oil_change_due_mileage && Number(v.current_mileage || 0) >= Number(v.oil_change_due_mileage) ? "var(--danger)" : "var(--muted)" }}>{v.oil_change_due_mileage ? `${Number(v.oil_change_due_mileage).toLocaleString()} mi` : "—"}</td>
                   <td>
                     <select
                       value={v.status}
@@ -3727,8 +3721,7 @@ function ChaseVehicles() {
                           model: v.model || "",
                           current_mileage: v.current_mileage ? String(v.current_mileage) : "",
                           notes: v.notes || "",
-                          last_oil_change: v.last_oil_change || "",
-                          last_oil_change_mileage: v.last_oil_change_mileage ? String(v.last_oil_change_mileage) : "",
+                          oil_change_due_mileage: v.oil_change_due_mileage ? String(v.oil_change_due_mileage) : "",
                         });
                       }}
                     >
@@ -5989,13 +5982,14 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose, canSeePay 
     if (trip.chase_vehicle_stock && form.miles) {
       const { data: chaseVehicle } = await supabase
         .from("chase_vehicles")
-        .select("id, current_mileage")
+        .select("id, current_mileage, oil_change_due_mileage, year, make, model")
         .eq("stock_number", trip.chase_vehicle_stock)
         .single();
       if (chaseVehicle) {
         const tripMiles = Number(form.miles) || 0;
+        const newMileage = Number(chaseVehicle.current_mileage || 0) + tripMiles;
         await supabase.from("chase_vehicles").update({
-          current_mileage: Number(chaseVehicle.current_mileage || 0) + tripMiles,
+          current_mileage: newMileage,
           updated_at: new Date().toISOString(),
         }).eq("id", chaseVehicle.id);
         await supabase.from("chase_vehicle_mileage_log").insert({
@@ -6006,6 +6000,40 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose, canSeePay 
           trip_date: (trip.actual_end ? new Date(trip.actual_end) : new Date()).toISOString().slice(0, 10),
           driver_name: driver1?.name || "Unknown",
         });
+
+        // Check if oil change is now due
+        if (chaseVehicle.oil_change_due_mileage && newMileage >= Number(chaseVehicle.oil_change_due_mileage)) {
+          const vehicleLabel = `${chaseVehicle.year || ""} ${chaseVehicle.make || ""} ${chaseVehicle.model || ""} (${trip.chase_vehicle_stock})`.trim();
+          await supabase.from("system_logs").insert({
+            source: "web",
+            level: "warning",
+            event: "oil_change_due",
+            message: `Oil change due for ${vehicleLabel} — now at ${newMileage.toLocaleString()} mi (due at ${Number(chaseVehicle.oil_change_due_mileage).toLocaleString()} mi)`,
+            metadata: { vehicle_id: chaseVehicle.id, stock_number: trip.chase_vehicle_stock, current_mileage: newMileage, due_mileage: chaseVehicle.oil_change_due_mileage },
+          });
+          // Push notification to admins
+          try {
+            const { data: adminTokens } = await supabase
+              .from("profiles")
+              .select("push_token")
+              .in("role", ["admin", "manager"])
+              .not("push_token", "is", null);
+            const tokens = (adminTokens || []).map(a => a.push_token).filter(t => t?.startsWith("ExponentPushToken"));
+            if (tokens.length > 0) {
+              await fetch("https://exp.host/--/api/v2/push/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(tokens.map(to => ({
+                  to,
+                  sound: "default",
+                  title: "🛢️ Oil Change Due",
+                  body: `${vehicleLabel} has reached ${newMileage.toLocaleString()} mi — oil change was due at ${Number(chaseVehicle.oil_change_due_mileage).toLocaleString()} mi`,
+                  data: { type: "oil_change_due", vehicle_id: chaseVehicle.id },
+                }))),
+              });
+            }
+          } catch {}
+        }
       }
     }
 
@@ -6663,6 +6691,14 @@ function AdminTrips({
         .update({ ended_at: new Date().toISOString(), duration_minutes: 0 })
         .eq("trip_id", trip.id)
         .is("ended_at", null);
+      // Notify admins
+      try {
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-trip-status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+          body: JSON.stringify({ trip_id: trip.id, driver_id: trip.driver_id, action: "ended" }),
+        });
+      } catch {}
     }
   }
 
