@@ -3778,6 +3778,13 @@ function AdminDashboard({
 }) {
   const isAdmin = user.role === "admin" || user.role === "manager";
   const canSeePay = user.role === "admin";
+  const [chaseVehiclesList, setChaseVehiclesList] = useState([]);
+
+  useEffect(() => {
+    supabase.from("chase_vehicles").select("*").eq("status", "active").order("stock_number").then(({ data }) => {
+      setChaseVehiclesList(data || []);
+    });
+  }, []);
   const drivers = allProfiles.filter((u) => u.role === "driver" || u.role === "manager");
 
   // URL ↔ tab sync
@@ -4212,15 +4219,20 @@ function AdminDashboard({
                 </div>
                 {form.trip_type === "drive" && (
                   <div className="field">
-                    <label>Chase Vehicle Stock #</label>
-                    <input
-                      type="text"
-                      placeholder="STK-001"
+                    <label>Chase Vehicle</label>
+                    <select
                       value={form.chase_vehicle_stock}
                       onChange={(e) =>
                         setForm((f) => ({ ...f, chase_vehicle_stock: e.target.value }))
                       }
-                    />
+                    >
+                      <option value="">— Select Chase Vehicle —</option>
+                      {chaseVehiclesList.map((v) => (
+                        <option key={v.id} value={v.stock_number}>
+                          {v.stock_number} — {v.year} {v.make} {v.model}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
                 <div className="field">
@@ -4756,6 +4768,13 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState([]);
+  const [chaseVehicles, setChaseVehicles] = useState([]);
+
+  useEffect(() => {
+    supabase.from("chase_vehicles").select("*").eq("status", "active").order("stock_number").then(({ data }) => {
+      setChaseVehicles(data || []);
+    });
+  }, []);
   const addressTimeoutRef = useRef(null);
   const [error, setError] = useState("");
   const [fetching, setFetching] = useState(false);
@@ -5200,13 +5219,18 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
         </div>
         {form.trip_type === "drive" && (
           <div className="field">
-            <label>Chase Vehicle Stock #</label>
-            <input
-              type="text"
-              placeholder="STK-001"
+            <label>Chase Vehicle</label>
+            <select
               value={form.chase_vehicle_stock}
               onChange={(e) => set("chase_vehicle_stock", e.target.value)}
-            />
+            >
+              <option value="">— Select Chase Vehicle —</option>
+              {chaseVehicles.map((v) => (
+                <option key={v.id} value={v.stock_number}>
+                  {v.stock_number} — {v.year} {v.make} {v.model}
+                </option>
+              ))}
+            </select>
           </div>
         )}
         <div className="field" style={{ gridColumn: "1 / -1", position: "relative" }}>
