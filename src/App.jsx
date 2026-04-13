@@ -5516,6 +5516,195 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
 }
 
 // ─── FINALIZE TRIP MODAL ──────────────────────────────────────────────────────
+// ─── TRIP DETAIL MODAL ────────────────────────────────────────────────────────
+function TripDetailModal({ trip, allProfiles, photoCounts, onClose, onFinalize, onEdit, onEndTrip, onDelete, isAdmin }) {
+  const [photos, setPhotos] = useState([]);
+  const [loadingPhotos, setLoadingPhotos] = useState(true);
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+
+  const driver1 = allProfiles.find((p) => p.id === trip.driver_id);
+  const driver2 = trip.second_driver_id ? allProfiles.find((p) => p.id === trip.second_driver_id) : null;
+
+  useEffect(() => {
+    async function loadPhotos() {
+      const { data } = await supabase
+        .from("vehicle_photos")
+        .select("*")
+        .eq("trip_id", trip.id)
+        .order("created_at", { ascending: true });
+      setPhotos(data || []);
+      setLoadingPhotos(false);
+    }
+    loadPhotos();
+  }, [trip.id]);
+
+  function getPhotoUrl(storagePath) {
+    const { data } = supabase.storage.from("vehicle-photos").getPublicUrl(storagePath);
+    return data?.publicUrl;
+  }
+
+  const duration = trip.actual_start && trip.actual_end
+    ? ((new Date(trip.actual_end) - new Date(trip.actual_start)) / 3600000).toFixed(1)
+    : null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 640, maxHeight: "85vh", overflow: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+          <div>
+            <div className="modal-title" style={{ marginBottom: 4 }}>Trip Details</div>
+            <div style={{ fontSize: 13, color: "var(--muted)" }}>
+              {trip.crm_id || "—"} · {tripTypeLabel(trip.trip_type)}
+            </div>
+          </div>
+          <button className="btn btn-ghost" style={{ padding: "6px 16px", fontSize: 11 }} onClick={onClose}>CLOSE</button>
+        </div>
+
+        {/* Trip Info */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20, padding: 16, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>DESTINATION</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{trip.city}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>DRIVER(S)</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>
+              {driver1?.name || "—"}
+              {driver2 && ` + ${driver2.name}`}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>STATUS</div>
+            <TripStatusBadge status={trip.status} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>PICKUP</div>
+            <div style={{ fontSize: 13 }}>
+              {new Date(trip.scheduled_pickup).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{" "}
+              {new Date(trip.scheduled_pickup).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+            </div>
+          </div>
+          {trip.actual_start && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>STARTED</div>
+              <div style={{ fontSize: 13 }}>{new Date(trip.actual_start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
+            </div>
+          )}
+          {trip.actual_end && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>ENDED</div>
+              <div style={{ fontSize: 13 }}>{new Date(trip.actual_end).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</div>
+            </div>
+          )}
+          {duration && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>DURATION</div>
+              <div style={{ fontSize: 13 }}>{duration}h</div>
+            </div>
+          )}
+          {trip.miles > 0 && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>MILES</div>
+              <div style={{ fontSize: 13 }}>{Number(trip.miles).toFixed(1)} mi</div>
+            </div>
+          )}
+          {trip.dealer_plate && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>DEALER PLATE</div>
+              <div style={{ fontSize: 13 }}>{trip.dealer_plate}</div>
+            </div>
+          )}
+          {trip.chase_vehicle_stock && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>CHASE VEHICLE</div>
+              <div style={{ fontSize: 13 }}>{trip.chase_vehicle_stock}</div>
+            </div>
+          )}
+          {trip.destination_address && (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>ADDRESS</div>
+              <div style={{ fontSize: 13 }}>{trip.destination_address}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Vehicle Mileage */}
+        {trip.purchased_vehicle_mileage && (
+          <div style={{ padding: "12px 16px", background: "rgba(245,166,35,0.06)", border: "1px solid rgba(245,166,35,0.2)", borderRadius: "var(--radius-sm)", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>Purchased Vehicle Odometer</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: "var(--accent)" }}>{Number(trip.purchased_vehicle_mileage).toLocaleString()} mi</span>
+          </div>
+        )}
+
+        {/* Notes */}
+        {trip.notes && (
+          <div style={{ padding: "10px 14px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", marginBottom: 16, fontSize: 13, color: "var(--muted)" }}>
+            {trip.notes}
+          </div>
+        )}
+
+        {/* Photos */}
+        {!loadingPhotos && photos.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 10 }}>
+              VEHICLE PHOTOS ({photos.length})
+            </div>
+            {selectedPhoto && (
+              <div style={{ marginBottom: 12, textAlign: "center" }}>
+                <img
+                  src={getPhotoUrl(selectedPhoto.storage_path)}
+                  alt="Vehicle"
+                  style={{ maxWidth: "100%", maxHeight: "40vh", borderRadius: 8, border: "1px solid var(--border)" }}
+                />
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                  {new Date(selectedPhoto.created_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}
+                </div>
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 8 }}>
+              {photos.map((photo) => (
+                <div
+                  key={photo.id}
+                  onClick={() => setSelectedPhoto(photo)}
+                  style={{
+                    cursor: "pointer",
+                    borderRadius: 6,
+                    overflow: "hidden",
+                    border: selectedPhoto?.id === photo.id ? "2px solid var(--accent)" : "1px solid var(--border)",
+                    aspectRatio: "1",
+                  }}
+                >
+                  <img
+                    src={getPhotoUrl(photo.storage_path)}
+                    alt="Vehicle"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {isAdmin && trip.status === "pending" && (
+            <>
+              <button className="btn-edit" style={{ background: "rgba(245,166,35,0.1)", color: "var(--accent)", borderColor: "var(--accent)" }} onClick={() => { onClose(); onEdit(trip); }}>Edit</button>
+              <button className="btn-edit" style={{ background: "rgba(232,90,74,0.1)", color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => { onClose(); onDelete(trip); }}>Delete</button>
+            </>
+          )}
+          {isAdmin && trip.status === "in_progress" && (
+            <button className="btn-edit" style={{ background: "rgba(232,90,74,0.1)", color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => { onClose(); onEndTrip(trip); }}>End Trip</button>
+          )}
+          {isAdmin && trip.status === "completed" && (
+            <button className="btn-edit" style={{ background: "rgba(74,232,133,0.1)", color: "var(--success)", borderColor: "var(--success)" }} onClick={() => { onClose(); onFinalize(trip); }}>Finalize</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── VEHICLE PHOTOS MODAL ─────────────────────────────────────────────────────
 function VehiclePhotosModal({ tripId, tripLabel, onClose }) {
   const [photos, setPhotos] = useState([]);
@@ -6387,6 +6576,7 @@ function AdminTrips({
   const [expandedGroups, setExpandedGroups] = useState({}); // group_id -> bool
   const [editingStockNumbers, setEditingStockNumbers] = useState(null); // group_id
   const [viewingPhotos, setViewingPhotos] = useState(null); // { tripId, label }
+  const [viewingTrip, setViewingTrip] = useState(null); // full trip object
   const [photoCounts, setPhotoCounts] = useState({});
   const [stockNumberDraft, setStockNumberDraft] = useState("");
 
@@ -6532,6 +6722,19 @@ function AdminTrips({
             );
           }}
           onClose={() => setFinalizingAAGroup(null)}
+        />
+      )}
+      {viewingTrip && (
+        <TripDetailModal
+          trip={viewingTrip}
+          allProfiles={allProfiles}
+          photoCounts={photoCounts}
+          isAdmin={isAdmin}
+          onClose={() => setViewingTrip(null)}
+          onFinalize={(t) => { setViewingTrip(null); setFinalizingTrip(t); }}
+          onEdit={(t) => { setViewingTrip(null); setEditingTrip({ ...t }); }}
+          onEndTrip={(t) => { setViewingTrip(null); handleEndTrip(t); }}
+          onDelete={(t) => { setViewingTrip(null); handleDeleteTrip(t); }}
         />
       )}
       {viewingPhotos && (
@@ -6737,8 +6940,13 @@ function AdminTrips({
 
                   // ── REGULAR TRIP ROW ──
                   const trip = item.trip;
+                  const hasDetail = trip.purchased_vehicle_mileage || (photoCounts[trip.id] || 0) > 0 || trip.destination_address || trip.dealer_plate || trip.notes;
                   return (
-                    <tr key={trip.id}>
+                    <tr
+                      key={trip.id}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => setViewingTrip(trip)}
+                    >
                       <td>
                         <TripStatusBadge status={trip.status} />
                       </td>
@@ -6769,7 +6977,15 @@ function AdminTrips({
                           trip.crm_id
                         )}
                       </td>
-                      <td>{trip.city}</td>
+                      <td>
+                        {trip.city}
+                        {(trip.purchased_vehicle_mileage || photoCounts[trip.id] > 0) && (
+                          <span style={{ marginLeft: 6, fontSize: 10, color: "var(--muted)" }}>
+                            {trip.purchased_vehicle_mileage ? "📋" : ""}
+                            {photoCounts[trip.id] > 0 ? ` 📸${photoCounts[trip.id]}` : ""}
+                          </span>
+                        )}
+                      </td>
                       <td style={{ color: "var(--muted)", fontSize: 12 }}>
                         {new Date(trip.scheduled_pickup).toLocaleDateString(
                           "en-US",
@@ -6796,7 +7012,7 @@ function AdminTrips({
                             )
                           : "—"}
                       </td>
-                      <td style={{ whiteSpace: "nowrap" }}>
+                      <td style={{ whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
                         {isAdmin && trip.status === "pending" && (
                           <>
                             <button
@@ -6849,19 +7065,6 @@ function AdminTrips({
                             onClick={() => setFinalizingTrip(trip)}
                           >
                             Finalize
-                          </button>
-                        )}
-                        {photoCounts[trip.id] > 0 && (
-                          <button
-                            className="btn-edit"
-                            style={{
-                              background: "rgba(59,130,246,0.1)",
-                              color: "#3b82f6",
-                              borderColor: "#3b82f6",
-                            }}
-                            onClick={() => setViewingPhotos({ tripId: trip.id, label: `${trip.crm_id || ""} — ${trip.city}` })}
-                          >
-                            Photos ({photoCounts[trip.id]})
                           </button>
                         )}
                       </td>
