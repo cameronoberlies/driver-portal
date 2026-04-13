@@ -2560,14 +2560,24 @@ function WebTripLogs({ drivers }) {
   }
 
   function geocodeStops(stopsToGeocode) {
-    // Rate-limit geocoding: 1 request per 600ms to stay within LocationIQ limits
     const pending = stopsToGeocode.filter(
-      (stop) => stop.latitude && stop.longitude && !stopLocations[stop.id]
+      (stop) => stop.latitude && stop.longitude && !stopLocations[stop.id] && !stop.city
     );
+    // Use cached city from DB first
+    stopsToGeocode.forEach((stop) => {
+      if (stop.city && !stopLocations[stop.id]) {
+        setStopLocations((prev) => ({ ...prev, [stop.id]: stop.city }));
+      }
+    });
+    // Only geocode stops that have no city saved — rate limited
     pending.forEach((stop, i) => {
       setTimeout(() => {
         webReverseGeocode(stop.latitude, stop.longitude).then((loc) => {
-          if (loc) setStopLocations((prev) => ({ ...prev, [stop.id]: loc }));
+          if (loc) {
+            setStopLocations((prev) => ({ ...prev, [stop.id]: loc }));
+            // Save to DB so we never look it up again
+            supabase.from('trip_stops').update({ city: loc }).eq('id', stop.id);
+          }
         });
       }, i * 600);
     });
