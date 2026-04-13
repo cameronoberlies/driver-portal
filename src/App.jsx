@@ -3517,7 +3517,7 @@ function ChaseVehicles() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("list"); // list | add
   const [editingVehicle, setEditingVehicle] = useState(null);
-  const [form, setForm] = useState({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "" });
+  const [form, setForm] = useState({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "", last_oil_change: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [expandedVehicle, setExpandedVehicle] = useState(null);
@@ -3542,7 +3542,7 @@ function ChaseVehicles() {
   }
 
   function resetForm() {
-    setForm({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "" });
+    setForm({ stock_number: "", vin: "", year: "", make: "", model: "", current_mileage: "", notes: "", last_oil_change: "" });
     setError("");
   }
 
@@ -3562,6 +3562,7 @@ function ChaseVehicles() {
           model: form.model || null,
           current_mileage: form.current_mileage ? Number(form.current_mileage) : 0,
           notes: form.notes || null,
+          last_oil_change: form.last_oil_change || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", editingVehicle.id);
@@ -3577,6 +3578,7 @@ function ChaseVehicles() {
           model: form.model || null,
           current_mileage: form.current_mileage ? Number(form.current_mileage) : 0,
           notes: form.notes || null,
+          last_oil_change: form.last_oil_change || null,
         });
       if (err) { setError(err.message); setSaving(false); return; }
     }
@@ -3630,6 +3632,10 @@ function ChaseVehicles() {
             <label>Current Mileage</label>
             <input type="number" value={form.current_mileage} onChange={(e) => setForm({ ...form, current_mileage: e.target.value })} placeholder="45000" />
           </div>
+          <div className="field">
+            <label>Last Oil Change</label>
+            <input type="date" value={form.last_oil_change} onChange={(e) => setForm({ ...form, last_oil_change: e.target.value })} />
+          </div>
           <div className="field" style={{ gridColumn: "1 / -1" }}>
             <label>Notes</label>
             <input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Any notes..." />
@@ -3667,6 +3673,7 @@ function ChaseVehicles() {
               <th>Vehicle</th>
               <th>VIN</th>
               <th>Mileage</th>
+              <th>Last Oil Change</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -3679,6 +3686,7 @@ function ChaseVehicles() {
                   <td>{v.year} {v.make} {v.model}</td>
                   <td style={{ fontSize: 11, color: "var(--muted)", fontFamily: "monospace" }}>{v.vin || "—"}</td>
                   <td style={{ fontWeight: 600 }}>{Number(v.current_mileage || 0).toLocaleString()} mi</td>
+                  <td style={{ fontSize: 12, color: "var(--muted)" }}>{v.last_oil_change || "—"}</td>
                   <td>
                     <select
                       value={v.status}
@@ -3713,6 +3721,7 @@ function ChaseVehicles() {
                           model: v.model || "",
                           current_mileage: v.current_mileage ? String(v.current_mileage) : "",
                           notes: v.notes || "",
+                          last_oil_change: v.last_oil_change || "",
                         });
                       }}
                     >
@@ -3729,7 +3738,7 @@ function ChaseVehicles() {
                 </tr>
                 {expandedVehicle === v.id && (
                   <tr>
-                    <td colSpan="6" style={{ padding: "12px 20px", background: "var(--bg)" }}>
+                    <td colSpan="7" style={{ padding: "12px 20px", background: "var(--bg)" }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 8 }}>MILEAGE LOG</div>
                       {(mileageLogs[v.id] || []).length === 0 ? (
                         <div style={{ fontSize: 12, color: "var(--muted)" }}>No trips recorded for this vehicle yet.</div>
