@@ -2123,14 +2123,20 @@ function LiveDriversMap({ drivers }) {
 
   async function fetchLocations(map) {
     setLoading(true);
-    const [{ data: locs }, { data: stops }] = await Promise.all([
+    const [{ data: locs }, { data: stops }, { data: activeTrips }] = await Promise.all([
       supabase.from("driver_locations").select("*"),
       supabase.from("trip_stops").select("*").is("ended_at", null),
+      supabase.from("trips").select("driver_id, second_driver_id").eq("status", "in_progress"),
     ]);
-    setLocations(locs ?? []);
+    // Only show drivers with active trips
+    const activeDriverIds = new Set(
+      (activeTrips ?? []).flatMap(t => [t.driver_id, t.second_driver_id].filter(Boolean))
+    );
+    const filteredLocs = (locs ?? []).filter(l => activeDriverIds.has(l.driver_id));
+    setLocations(filteredLocs);
     setActiveStops(stops ?? []);
     setLastRefresh(new Date());
-    updateMarkers(locs ?? [], stops ?? [], map);
+    updateMarkers(filteredLocs, stops ?? [], map);
     setLoading(false);
   }
 
@@ -2166,22 +2172,30 @@ function LiveDriversMap({ drivers }) {
         stopInfo = `<div style="font-size: 11px; color: #ff453a; font-weight: 700; margin-top: 4px;">STOPPED ${stopMins}m</div>`;
       }
 
-      // Calculate distance from dealership (Haversine)
-      const DEALER_LAT = 35.270367;
-      const DEALER_LON = -81.496247;
-      const toRad = (deg) => deg * Math.PI / 180;
-      const dLat = toRad(loc.latitude - DEALER_LAT);
-      const dLon = toRad(loc.longitude - DEALER_LON);
-      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(toRad(DEALER_LAT)) * Math.cos(toRad(loc.latitude)) *
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-      const distMiles = 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      const etaHours = distMiles / 60;
-      const etaLabel = distMiles < 5
-        ? "At the dealership"
-        : etaHours < 1
-          ? `~${Math.round(distMiles)} mi out, ~${Math.round(etaHours * 60)} min`
-          : `~${Math.round(distMiles)} mi out, ~${etaHours.toFixed(1)} hrs`;
+      // Use real ETA from Google Distance Matrix (cached in driver_locations)
+      // Fall back to straight-line distance if no ETA cached yet
+      let etaLabel;
+      if (loc.eta_miles != null && loc.eta_minutes != null) {
+        if (loc.eta_miles < 5) {
+          etaLabel = "At the dealership";
+        } else {
+          const hrs = loc.eta_minutes / 60;
+          etaLabel = hrs < 1
+            ? `~${loc.eta_miles} mi, ~${loc.eta_minutes} min`
+            : `~${loc.eta_miles} mi, ~${hrs.toFixed(1)} hrs`;
+        }
+      } else {
+        const DEALER_LAT = 35.270367;
+        const DEALER_LON = -81.496247;
+        const toRad = (deg) => deg * Math.PI / 180;
+        const dLat = toRad(loc.latitude - DEALER_LAT);
+        const dLon = toRad(loc.longitude - DEALER_LON);
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(toRad(DEALER_LAT)) * Math.cos(toRad(loc.latitude)) *
+          Math.sin(dLon/2) * Math.sin(dLon/2);
+        const distMiles = 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        etaLabel = distMiles < 5 ? "At the dealership" : `~${Math.round(distMiles)} mi out`;
+      }
 
       const icon = window.L.divIcon({
         className: "",
