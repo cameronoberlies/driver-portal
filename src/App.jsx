@@ -581,6 +581,37 @@ function ChangePasswordModal({ onClose }) {
 }
 
 // ─── TOPBAR ───────────────────────────────────────────────────────────────────
+function NotificationWarningBanner({ profiles }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  const drivers = (profiles || []).filter(p => ["driver", "manager"].includes(p.role) && !p.push_token);
+  if (drivers.length === 0) return null;
+  const names = drivers.map(d => d.name).join(", ");
+  return (
+    <div style={{
+      background: "rgba(232,90,74,0.15)",
+      borderBottom: "2px solid var(--danger)",
+      color: "var(--danger)",
+      padding: "12px 20px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      fontSize: 13,
+      fontWeight: 700,
+    }}>
+      <div>
+        ⚠️ {drivers.length} driver{drivers.length !== 1 ? "s" : ""} {drivers.length === 1 ? "has" : "have"} notifications disabled — tracking will fail on their trips: <span style={{ fontWeight: 500 }}>{names}</span>
+      </div>
+      <button
+        onClick={() => setDismissed(true)}
+        style={{ background: "transparent", border: "1px solid var(--danger)", color: "var(--danger)", borderRadius: 4, padding: "4px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}
+      >
+        DISMISS
+      </button>
+    </div>
+  );
+}
+
 function Topbar({ user, onLogout }) {
   const [showChangePw, setShowChangePw] = useState(false);
   return (
@@ -8361,6 +8392,7 @@ export default function App() {
       ) : (
         <>
           <Topbar user={user} onLogout={handleLogout} />
+          {showAdminDashboard && <NotificationWarningBanner profiles={allProfiles} />}
           {showAdminDashboard && <AIChat />}
           {!showAdminDashboard ? (
             <DriverDashboard
