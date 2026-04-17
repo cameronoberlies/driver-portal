@@ -2736,7 +2736,7 @@ function WebTripLogs({ drivers }) {
             padding: "16px 20px",
           }}>
             {(() => {
-              const driverLoc = mode === "live" ? locations.find(l => l.driver_id === (trip.designated_driver_id || trip.driver_id)) : null;
+              const driverLoc = mode === "live" && typeof locations !== "undefined" ? locations.find(l => l.driver_id === (trip.designated_driver_id || trip.driver_id)) : null;
               return driverLoc?.obd_speed != null ? (
                 <div style={{ display: "flex", gap: 12, marginBottom: 8, padding: "6px 10px", background: "rgba(74,144,226,0.06)", border: "1px solid rgba(74,144,226,0.2)", borderRadius: 4, fontSize: 12 }}>
                   <span style={{ fontWeight: 700, color: driverLoc.obd_speed > 80 ? "var(--danger)" : "var(--text)" }}>{driverLoc.obd_speed} mph</span>
