@@ -2838,7 +2838,7 @@ function WebTripLogs({ drivers }) {
 }
 
 // ─── DRIVER DETAIL VIEW (with edit) ───────────────────────────────────────────
-function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated, canSeePay = false }) {
+function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated, canSeePay = false, canManageUsers = false }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -2948,7 +2948,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
         can_drive_manual: editForm.can_drive_manual,
         drivers_license_number: editForm.drivers_license_number || null,
         drivers_license_photo_url: licensePhotoUrl,
-        hourly_wage: editForm.hourly_wage ? Number(editForm.hourly_wage) : null,
+        ...(canSeePay && { hourly_wage: editForm.hourly_wage ? Number(editForm.hourly_wage) : null }),
       })
       .eq("id", driver.id);
 
@@ -3072,7 +3072,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
       <div style={{ marginBottom: 24, display: "flex", gap: 12, alignItems: "center" }}>
         <button onClick={onBack} className="btn-secondary">← Back</button>
         <h2 style={{ margin: 0 }}>{driver.name}</h2>
-        {canSeePay && <button onClick={startEdit} className="btn-edit" style={{ marginLeft: "auto" }}>Edit Profile</button>}
+        {canManageUsers && <button onClick={startEdit} className="btn-edit" style={{ marginLeft: "auto" }}>Edit Profile</button>}
       </div>
 
       {editSuccess && <div className="success-banner">{editSuccess}</div>}
@@ -3173,7 +3173,7 @@ function DriverDetailView({ driver, onBack, onDelete, deleting, onProfileUpdated
   );
 }
 
-function ManageUsers({ allProfiles, setAllProfiles, canSeePay }) {
+function ManageUsers({ allProfiles, setAllProfiles, canSeePay, canManageUsers }) {
   const [view, setView] = useState("list"); // list | add | view
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [form, setForm] = useState({
@@ -3263,16 +3263,19 @@ function ManageUsers({ allProfiles, setAllProfiles, canSeePay }) {
     }
 
     // Step 3: Update profile with additional fields
+    const profileUpdate = {
+      phone_number: form.phone_number || null,
+      date_of_birth: form.date_of_birth || null,
+      can_drive_manual: form.can_drive_manual,
+      drivers_license_number: form.drivers_license_number || null,
+      drivers_license_photo_url: licensePhotoUrl,
+    };
+    if (canSeePay) {
+      profileUpdate.hourly_wage = form.hourly_wage ? Number(form.hourly_wage) : null;
+    }
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({
-        phone_number: form.phone_number || null,
-        date_of_birth: form.date_of_birth || null,
-        can_drive_manual: form.can_drive_manual,
-        drivers_license_number: form.drivers_license_number || null,
-        drivers_license_photo_url: licensePhotoUrl,
-        hourly_wage: form.hourly_wage ? Number(form.hourly_wage) : null,
-      })
+      .update(profileUpdate)
       .eq("id", newUserId);
 
     if (updateError) {
@@ -3491,6 +3494,7 @@ function ManageUsers({ allProfiles, setAllProfiles, canSeePay }) {
           setAllProfiles((prev) => prev.map((p) => p.id === updated.id ? updated : p));
         }}
         canSeePay={canSeePay}
+        canManageUsers={canManageUsers}
       />
     );
   }
@@ -3500,7 +3504,7 @@ function ManageUsers({ allProfiles, setAllProfiles, canSeePay }) {
     <div>
       <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ margin: 0 }}>Manage Users</h2>
-        {canSeePay && (
+        {canManageUsers && (
           <button onClick={() => setView("add")} className="btn btn-primary">
             + Create User
           </button>
@@ -3863,6 +3867,7 @@ function AdminDashboard({
 }) {
   const isAdmin = user.role === "admin" || user.role === "manager";
   const canSeePay = user.role === "admin";
+  const canManageUsers = user.role === "admin" || user.role === "manager";
   const [chaseVehiclesList, setChaseVehiclesList] = useState([]);
 
   useEffect(() => {
@@ -4091,7 +4096,7 @@ function AdminDashboard({
           { key: "availability", icon: "📅", label: "Availability" },
           { key: "capacity", icon: "📋", label: "Capacity" },
           { key: "live drivers", icon: "📍", label: "Live Drivers" },
-          isAdmin && { key: "manage users", icon: "👥", label: "Manage Users" },
+          canManageUsers && { key: "manage users", icon: "👥", label: "Manage Users" },
           isAdmin && { key: "fleet", icon: "🚙", label: "Fleet" },
           { key: "pickup calculator", icon: "🧮", label: "Pickup Calc" },
           { key: "downloads", icon: "⬇", label: "Downloads" },
@@ -4794,6 +4799,7 @@ function AdminDashboard({
           allProfiles={allProfiles}
           setAllProfiles={setAllProfiles}
           canSeePay={canSeePay}
+          canManageUsers={canManageUsers}
         />
       )}
 
