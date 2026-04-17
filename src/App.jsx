@@ -2255,6 +2255,7 @@ function LiveDriversMap({ drivers }) {
             <div style="font-size: 11px; color: #6b7585; letter-spacing: 1px;">LAST UPDATE</div>
             <div style="font-size: 13px; font-weight: 600; color: ${color};">${ageLabel}</div>
             ${stopInfo}
+            ${loc.obd_speed != null ? `<div style="font-size: 11px; color: #6b7585; letter-spacing: 1px; margin-top: 6px;">VEHICLE</div><div style="font-size: 13px; font-weight: 600;">${loc.obd_speed} mph${loc.obd_rpm != null ? ` · ${loc.obd_rpm.toLocaleString()} rpm` : ""}${loc.obd_fuel != null ? ` · ⛽ ${loc.obd_fuel}%` : ""}</div>` : ""}
             <div style="font-size: 12px; color: #f5a623; font-weight: 600; margin-top: 6px;">${etaLabel}</div>
           </div>
         `,
@@ -2402,6 +2403,16 @@ function LiveDriversMap({ drivers }) {
                 <span style={{ fontSize: 12, fontWeight: 700 }}>
                   {driver?.name ?? "Unknown"}
                 </span>
+                {loc.obd_speed != null && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: loc.obd_speed > 80 ? "var(--danger)" : "var(--text)" }}>
+                    {loc.obd_speed} mph
+                  </span>
+                )}
+                {loc.obd_fuel != null && (
+                  <span style={{ fontSize: 11, color: loc.obd_fuel < 15 ? "var(--danger)" : "var(--muted)" }}>
+                    ⛽ {loc.obd_fuel}%
+                  </span>
+                )}
                 <span style={{ fontSize: 11, color: "var(--muted)" }}>
                   {ageLabel}
                 </span>
@@ -2724,6 +2735,16 @@ function WebTripLogs({ drivers }) {
             borderRadius: "var(--radius-sm)",
             padding: "16px 20px",
           }}>
+            {(() => {
+              const driverLoc = mode === "live" ? locations.find(l => l.driver_id === (trip.designated_driver_id || trip.driver_id)) : null;
+              return driverLoc?.obd_speed != null ? (
+                <div style={{ display: "flex", gap: 12, marginBottom: 8, padding: "6px 10px", background: "rgba(74,144,226,0.06)", border: "1px solid rgba(74,144,226,0.2)", borderRadius: 4, fontSize: 12 }}>
+                  <span style={{ fontWeight: 700, color: driverLoc.obd_speed > 80 ? "var(--danger)" : "var(--text)" }}>{driverLoc.obd_speed} mph</span>
+                  {driverLoc.obd_rpm != null && <span style={{ color: "var(--muted)" }}>{driverLoc.obd_rpm.toLocaleString()} rpm</span>}
+                  {driverLoc.obd_fuel != null && <span style={{ color: driverLoc.obd_fuel < 15 ? "var(--danger)" : "var(--muted)" }}>⛽ {driverLoc.obd_fuel}%</span>}
+                </div>
+              ) : null;
+            })()}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>{driverName}</div>
@@ -2735,7 +2756,7 @@ function WebTripLogs({ drivers }) {
               </div>
             </div>
 
-            {mode === "history" && false && trip.speed_data && trip.speed_data.top_speed > 0 && (
+            {mode === "history" && trip.speed_data && trip.speed_data.top_speed > 0 && (
               <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: "var(--muted)" }}>
                 <span>⚡ {trip.speed_data.top_speed} mph <span style={{ color: "#555" }}>top</span></span>
                 <span>{trip.speed_data.avg_speed} mph <span style={{ color: "#555" }}>avg</span></span>
@@ -5721,6 +5742,136 @@ function TripDetailModal({ trip, allProfiles, photoCounts, onClose, onFinalize, 
           <div style={{ padding: "12px 16px", background: "rgba(245,166,35,0.06)", border: "1px solid rgba(245,166,35,0.2)", borderRadius: "var(--radius-sm)", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, color: "var(--muted)" }}>Purchased Vehicle Odometer</span>
             <span style={{ fontSize: 16, fontWeight: 800, color: "var(--accent)" }}>{Number(trip.purchased_vehicle_mileage).toLocaleString()} mi</span>
+          </div>
+        )}
+
+        {/* OBD Vehicle Data */}
+        {trip.obd_data?.obd_connected && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--info)" }}>
+                VEHICLE TELEMETRY
+              </div>
+              {trip.chase_vehicle_stock && (
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "3px 10px" }}>
+                  Fleet: {trip.chase_vehicle_stock}
+                </div>
+              )}
+            </div>
+            {trip.obd_data.vehicle && (
+              <div style={{ padding: "10px 14px", background: "var(--bg)", borderLeft: "3px solid var(--info)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", marginBottom: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 900 }}>
+                  {[trip.obd_data.vehicle.year, trip.obd_data.vehicle.make, trip.obd_data.vehicle.model].filter(Boolean).join(" ")}
+                  {trip.obd_data.vehicle.trim ? ` ${trip.obd_data.vehicle.trim}` : ""}
+                </div>
+                {trip.obd_data.vehicle.vin && (
+                  <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "monospace", letterSpacing: 1, marginTop: 2 }}>{trip.obd_data.vehicle.vin}</div>
+                )}
+                <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+                  {trip.obd_data.vehicle.engineSize && (
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>{trip.obd_data.vehicle.engineSize}L {trip.obd_data.vehicle.cylinders ? `${trip.obd_data.vehicle.cylinders}cyl` : ""}</span>
+                  )}
+                  {trip.obd_data.vehicle.transmission && (
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>{trip.obd_data.vehicle.transmission}</span>
+                  )}
+                  {trip.obd_data.vehicle.fuelType && (
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>{trip.obd_data.vehicle.fuelType}</span>
+                  )}
+                </div>
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+              {trip.obd_data.odometer_miles != null && (
+                <div style={{ padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>OBD MILES</div>
+                  <div style={{ fontSize: 20, fontWeight: 900 }}>{trip.obd_data.odometer_miles}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>miles</div>
+                </div>
+              )}
+              {trip.obd_data.max_speed != null && (
+                <div style={{ padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>MAX SPEED</div>
+                  <div style={{ fontSize: 20, fontWeight: 900 }}>{trip.obd_data.max_speed}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>mph</div>
+                </div>
+              )}
+              {trip.obd_data.max_rpm != null && (
+                <div style={{ padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>MAX RPM</div>
+                  <div style={{ fontSize: 20, fontWeight: 900 }}>{trip.obd_data.max_rpm?.toLocaleString()}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>rpm</div>
+                </div>
+              )}
+              {trip.obd_data.fuel_used != null && (
+                <div style={{ padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>FUEL USED</div>
+                  <div style={{ fontSize: 20, fontWeight: 900 }}>{trip.obd_data.fuel_used}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>%</div>
+                </div>
+              )}
+            </div>
+
+            {/* Safety events */}
+            {(trip.obd_data.hard_brakes > 0 || trip.obd_data.hard_accelerations > 0) && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                {trip.obd_data.hard_brakes > 0 && (
+                  <div style={{ flex: 1, padding: 10, background: "rgba(245,166,35,0.06)", border: "1px solid rgba(245,166,35,0.2)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "var(--accent)" }}>{trip.obd_data.hard_brakes}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)", letterSpacing: 1.5 }}>HARD BRAKES</div>
+                  </div>
+                )}
+                {trip.obd_data.hard_accelerations > 0 && (
+                  <div style={{ flex: 1, padding: 10, background: "rgba(245,166,35,0.06)", border: "1px solid rgba(245,166,35,0.2)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "var(--accent)" }}>{trip.obd_data.hard_accelerations}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)", letterSpacing: 1.5 }}>HARD ACCELS</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Odometer range */}
+            {trip.obd_data.odometer_start != null && trip.obd_data.odometer_end != null && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", marginBottom: 12 }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5 }}>START</div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{trip.obd_data.odometer_start?.toLocaleString()} mi</div>
+                </div>
+                <span style={{ color: "var(--muted)", fontSize: 16 }}>&rarr;</span>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5 }}>END</div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{trip.obd_data.odometer_end?.toLocaleString()} mi</div>
+                </div>
+              </div>
+            )}
+
+            {/* Fuel range */}
+            {trip.obd_data.fuel_start != null && trip.obd_data.fuel_end != null && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", marginBottom: 12 }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5 }}>FUEL START</div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{trip.obd_data.fuel_start}%</div>
+                </div>
+                <span style={{ color: "var(--muted)", fontSize: 16 }}>&rarr;</span>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5 }}>FUEL END</div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{trip.obd_data.fuel_end}%</div>
+                </div>
+              </div>
+            )}
+
+            {/* Diagnostic codes */}
+            {trip.obd_data.diagnostic_codes?.length > 0 && (
+              <div style={{ padding: 12, borderTop: "1px solid var(--border)" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--danger)", marginBottom: 8 }}>
+                  ENGINE CODES ({trip.obd_data.diagnostic_codes.length})
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {trip.obd_data.diagnostic_codes.map((code, i) => (
+                    <span key={i} style={{ padding: "4px 10px", background: "rgba(232,90,74,0.08)", border: "1px solid rgba(232,90,74,0.2)", borderRadius: "var(--radius-sm)", fontSize: 12, fontWeight: 700, fontFamily: "monospace", color: "var(--danger)", letterSpacing: 1 }}>{code}</span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
