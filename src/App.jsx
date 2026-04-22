@@ -2756,7 +2756,7 @@ function WebTripLogs({ drivers }) {
               </div>
             </div>
 
-            {mode === "history" && trip.speed_data && trip.speed_data.top_speed > 0 && (
+            {mode === "history" && false && trip.speed_data && trip.speed_data.top_speed > 0 && (
               <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: "var(--muted)" }}>
                 <span>⚡ {trip.speed_data.top_speed} mph <span style={{ color: "#555" }}>top</span></span>
                 <span>{trip.speed_data.avg_speed} mph <span style={{ color: "#555" }}>avg</span></span>
