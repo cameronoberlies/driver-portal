@@ -5632,7 +5632,7 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
 
 // ─── FINALIZE TRIP MODAL ──────────────────────────────────────────────────────
 // ─── TRIP DETAIL MODAL ────────────────────────────────────────────────────────
-function TripDetailModal({ trip, allProfiles, photoCounts, onClose, onFinalize, onEdit, onEndTrip, onDelete, isAdmin }) {
+function TripDetailModal({ trip, allProfiles, photoCounts, onClose, onFinalize, onEdit, onEndTrip, onDelete, onReopen, isAdmin }) {
   const [photos, setPhotos] = useState([]);
   const [loadingPhotos, setLoadingPhotos] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
@@ -5942,7 +5942,10 @@ function TripDetailModal({ trip, allProfiles, photoCounts, onClose, onFinalize, 
             <button className="btn-edit" style={{ background: "rgba(232,90,74,0.1)", color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => { onClose(); onEndTrip(trip); }}>End Trip</button>
           )}
           {isAdmin && trip.status === "completed" && (
-            <button className="btn-edit" style={{ background: "rgba(74,232,133,0.1)", color: "var(--success)", borderColor: "var(--success)" }} onClick={() => { onClose(); onFinalize(trip); }}>Finalize</button>
+            <>
+              <button className="btn-edit" style={{ background: "rgba(74,232,133,0.1)", color: "var(--success)", borderColor: "var(--success)" }} onClick={() => { onClose(); onFinalize(trip); }}>Finalize</button>
+              <button className="btn-edit" style={{ background: "rgba(74,144,226,0.1)", color: "var(--info)", borderColor: "var(--info)" }} onClick={() => { onClose(); onReopen(trip); }}>Reopen</button>
+            </>
           )}
         </div>
       </div>
@@ -6912,6 +6915,42 @@ function AdminTrips({
     if (!error) setTrips((prev) => prev.filter((t) => t.id !== trip.id));
   }
 
+  async function handleReopenTrip(trip) {
+    if (!confirm(
+      `Reopen trip ${trip.crm_id || trip.city || trip.id}?\n\n` +
+      `This will set the trip back to in-progress and notify ${trip.designated_driver_id ? 'the designated driver' : 'the driver'} to resume tracking. ` +
+      `Existing miles and hours will be preserved.`
+    )) return;
+    setActing(trip.id);
+    const { data, error } = await supabase
+      .from("trips")
+      .update({ status: "in_progress", actual_end: null })
+      .eq("id", trip.id)
+      .select()
+      .single();
+    setActing(null);
+    if (!error && data) {
+      setTrips((prev) => prev.map((t) => (t.id === data.id ? data : t)));
+      // Notify the driver
+      try {
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-trip-status`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            trip_id: trip.id,
+            driver_id: trip.designated_driver_id || trip.driver_id,
+            action: 'reopened',
+          }),
+        });
+      } catch {}
+    } else if (error) {
+      alert(`Failed to reopen: ${error.message}`);
+    }
+  }
+
   async function handleSaveStockNumbers(groupId, value) {
     const groupTrips = trips.filter((t) => t.group_id === groupId);
     const ids = groupTrips.map((t) => t.id);
@@ -7023,6 +7062,7 @@ function AdminTrips({
           onEdit={(t) => { setViewingTrip(null); setEditingTrip({ ...t }); }}
           onEndTrip={(t) => { setViewingTrip(null); handleEndTrip(t); }}
           onDelete={(t) => { setViewingTrip(null); handleDeleteTrip(t); }}
+          onReopen={(t) => { setViewingTrip(null); handleReopenTrip(t); }}
         />
       )}
       {viewingPhotos && (
