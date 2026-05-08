@@ -4814,6 +4814,7 @@ const STATUS_COLORS = {
   in_progress: "#e8b44a",
   completed: "#4ae885",
   finalized: "#6b7585",
+  cancelled: "#878787",
 };
 function TripStatusBadge({ status }) {
   return (
@@ -5632,7 +5633,7 @@ function EditTripModal({ trip, allProfiles, onSaved, onClose }) {
 
 // ─── FINALIZE TRIP MODAL ──────────────────────────────────────────────────────
 // ─── TRIP DETAIL MODAL ────────────────────────────────────────────────────────
-function TripDetailModal({ trip, allProfiles, photoCounts, onClose, onFinalize, onEdit, onEndTrip, onDelete, onReopen, isAdmin }) {
+function TripDetailModal({ trip, allProfiles, photoCounts, onClose, onFinalize, onEdit, onEndTrip, onDelete, onReopen, onCancel, onRestore, isAdmin }) {
   const [photos, setPhotos] = useState([]);
   const [loadingPhotos, setLoadingPhotos] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
@@ -5935,6 +5936,13 @@ function TripDetailModal({ trip, allProfiles, photoCounts, onClose, onFinalize, 
           {isAdmin && trip.status === "pending" && (
             <>
               <button className="btn-edit" style={{ background: "rgba(245,166,35,0.1)", color: "var(--accent)", borderColor: "var(--accent)" }} onClick={() => { onClose(); onEdit(trip); }}>Edit</button>
+              <button className="btn-edit" style={{ background: "rgba(120,120,120,0.15)", color: "var(--muted)", borderColor: "var(--muted)" }} onClick={() => { onClose(); onCancel(trip); }}>Cancel</button>
+              <button className="btn-edit" style={{ background: "rgba(232,90,74,0.1)", color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => { onClose(); onDelete(trip); }}>Delete</button>
+            </>
+          )}
+          {isAdmin && trip.status === "cancelled" && (
+            <>
+              <button className="btn-edit" style={{ background: "rgba(74,144,226,0.1)", color: "var(--info)", borderColor: "var(--info)" }} onClick={() => { onClose(); onRestore(trip); }}>Restore</button>
               <button className="btn-edit" style={{ background: "rgba(232,90,74,0.1)", color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => { onClose(); onDelete(trip); }}>Delete</button>
             </>
           )}
@@ -6915,6 +6923,43 @@ function AdminTrips({
     if (!error) setTrips((prev) => prev.filter((t) => t.id !== trip.id));
   }
 
+  async function handleRestoreCancelledTrip(trip) {
+    setActing(trip.id);
+    const { data, error } = await supabase
+      .from("trips")
+      .update({ status: "pending" })
+      .eq("id", trip.id)
+      .select()
+      .single();
+    setActing(null);
+    if (!error && data) {
+      setTrips((prev) => prev.map((t) => (t.id === data.id ? data : t)));
+    } else if (error) {
+      alert(`Failed to restore: ${error.message}`);
+    }
+  }
+
+  async function handleCancelTrip(trip) {
+    if (!confirm(
+      `Cancel trip ${trip.crm_id || trip.city || trip.id}?\n\n` +
+      `The trip will be marked as cancelled and removed from the driver's dashboard. ` +
+      `This is reversible — you can revert the status later if needed.`
+    )) return;
+    setActing(trip.id);
+    const { data, error } = await supabase
+      .from("trips")
+      .update({ status: "cancelled" })
+      .eq("id", trip.id)
+      .select()
+      .single();
+    setActing(null);
+    if (!error && data) {
+      setTrips((prev) => prev.map((t) => (t.id === data.id ? data : t)));
+    } else if (error) {
+      alert(`Failed to cancel: ${error.message}`);
+    }
+  }
+
   async function handleReopenTrip(trip) {
     if (!confirm(
       `Reopen trip ${trip.crm_id || trip.city || trip.id}?\n\n` +
@@ -7063,6 +7108,8 @@ function AdminTrips({
           onEndTrip={(t) => { setViewingTrip(null); handleEndTrip(t); }}
           onDelete={(t) => { setViewingTrip(null); handleDeleteTrip(t); }}
           onReopen={(t) => { setViewingTrip(null); handleReopenTrip(t); }}
+          onCancel={(t) => { setViewingTrip(null); handleCancelTrip(t); }}
+          onRestore={(t) => { setViewingTrip(null); handleRestoreCancelledTrip(t); }}
         />
       )}
       {viewingPhotos && (
