@@ -481,12 +481,8 @@ function Login({ onLogin }) {
           <a href="https://apps.apple.com/us/app/discovery-driver-portal/id6760372806" target="_blank" rel="noreferrer">
             <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" style={{ height: 40 }} />
           </a>
-          <a href="/driverportal.apk" download style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#000", border: "1px solid #333", borderRadius: 6, padding: "6px 12px", textDecoration: "none", color: "#fff", fontSize: 12, height: 40 }}>
-            <span style={{ fontSize: 18 }}>🤖</span>
-            <div style={{ lineHeight: 1.2 }}>
-              <div style={{ fontSize: 8, letterSpacing: 0.5 }}>Download</div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>Android APK</div>
-            </div>
+          <a href="https://play.google.com/store/apps/details?id=com.cameronoberlies.driverpay" target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", height: 40 }}>
+            <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" style={{ height: 60, marginTop: -10, marginBottom: -10 }} />
           </a>
         </div>
       </div>
@@ -1325,8 +1321,9 @@ function DriverDashboard({ driver, entries, trips, setTrips, tab, setTab }) {
             <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" style={{ height: 40 }} />
           </a>
           <a
-            href="/driverportal.apk"
-            download
+            href="https://play.google.com/store/apps/details?id=com.cameronoberlies.driverpay"
+            target="_blank"
+            rel="noopener noreferrer"
             style={{
               display: "flex",
               alignItems: "center",
@@ -1354,7 +1351,7 @@ function DriverDashboard({ driver, entries, trips, setTrips, tab, setTab }) {
                 Android App
               </div>
               <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-                Download & install APK
+                Get it on Google Play
               </div>
             </div>
           </a>
@@ -4746,8 +4743,9 @@ function AdminDashboard({
             <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" style={{ height: 40 }} />
           </a>
           <a
-            href="/driverportal.apk"
-            download
+            href="https://play.google.com/store/apps/details?id=com.cameronoberlies.driverpay"
+            target="_blank"
+            rel="noopener noreferrer"
             style={{
               display: "flex",
               alignItems: "center",
@@ -4777,7 +4775,7 @@ function AdminDashboard({
               <div
                 style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}
               >
-                Download & install APK
+                Get it on Google Play
               </div>
             </div>
           </a>
