@@ -2088,6 +2088,7 @@ function LiveDriversMap({ drivers }) {
   const markersRef = useRef({});
   const [locations, setLocations] = useState([]);
   const [activeStops, setActiveStops] = useState([]);
+  const [obdInstability, setObdInstability] = useState({});
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [showTripLogs, setShowTripLogs] = useState(false);
@@ -2161,6 +2162,23 @@ function LiveDriversMap({ drivers }) {
       (activeTrips ?? []).flatMap(t => [t.driver_id, t.second_driver_id].filter(Boolean))
     );
     const filteredLocs = (locs ?? []).filter(l => activeDriverIds.has(l.driver_id));
+
+    // Count OBD failures per driver in the last 10 min — flag drivers
+    // with 5+ disconnects or any rescanning event as "unstable"
+    const { data: obdLogs } = await supabase
+      .from("system_logs")
+      .select("event, metadata, created_at")
+      .in("event", ["obd_disconnected", "obd_rescanning", "obd_no_ecu_response", "obd_connect_failed"])
+      .gte("created_at", new Date(Date.now() - 10 * 60 * 1000).toISOString());
+    const obdFailuresByDriver = {};
+    (obdLogs || []).forEach(log => {
+      const driverId = log.metadata?.driver_id;
+      if (driverId) {
+        obdFailuresByDriver[driverId] = (obdFailuresByDriver[driverId] || 0) + 1;
+      }
+    });
+    setObdInstability(obdFailuresByDriver);
+
     setLocations(filteredLocs);
     setActiveStops(stops ?? []);
     setLastRefresh(new Date());
@@ -2408,6 +2426,14 @@ function LiveDriversMap({ drivers }) {
                 {loc.obd_fuel != null && (
                   <span style={{ fontSize: 11, color: loc.obd_fuel < 15 ? "var(--danger)" : "var(--muted)" }}>
                     ⛽ {loc.obd_fuel}%
+                  </span>
+                )}
+                {obdInstability[loc.driver_id] >= 5 && (
+                  <span
+                    title={`${obdInstability[loc.driver_id]} OBD errors in last 10 min`}
+                    style={{ fontSize: 11, fontWeight: 700, color: "var(--danger)" }}
+                  >
+                    ⚠ OBD
                   </span>
                 )}
                 <span style={{ fontSize: 11, color: "var(--muted)" }}>
