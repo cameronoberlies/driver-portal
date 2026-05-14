@@ -2155,11 +2155,13 @@ function LiveDriversMap({ drivers }) {
     const [{ data: locs }, { data: stops }, { data: activeTrips }] = await Promise.all([
       supabase.from("driver_locations").select("*"),
       supabase.from("trip_stops").select("*").is("ended_at", null),
-      supabase.from("trips").select("driver_id, second_driver_id").eq("status", "in_progress"),
+      supabase.from("trips").select("driver_id, designated_driver_id").eq("status", "in_progress"),
     ]);
-    // Only show drivers with active trips
+    // Only show the designated driver of each active trip — second drivers are
+    // passengers, not tracked. second_driver_id was leaking through here when
+    // the driver had a stale driver_locations row from a previous trip.
     const activeDriverIds = new Set(
-      (activeTrips ?? []).flatMap(t => [t.driver_id, t.second_driver_id].filter(Boolean))
+      (activeTrips ?? []).map(t => t.designated_driver_id || t.driver_id).filter(Boolean)
     );
     const filteredLocs = (locs ?? []).filter(l => activeDriverIds.has(l.driver_id));
 
