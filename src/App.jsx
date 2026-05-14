@@ -7535,8 +7535,26 @@ function DriverTrips({ driver, trips, setTrips, allProfiles }) {
       .select()
       .single();
     setActing(null);
-    if (!error && data)
+    if (!error && data) {
       setTrips((prev) => prev.map((t) => (t.id === data.id ? data : t)));
+      await supabase.from("driver_locations").delete().eq("driver_id", trip.driver_id);
+      if (trip.second_driver_id) {
+        await supabase.from("driver_locations").delete().eq("driver_id", trip.second_driver_id);
+      }
+      // Close any unclosed stops for this trip — without this the live map
+      // shows the stop forever (see Jennifer Jones 22081m incident, 2026-05).
+      await supabase.from("trip_stops")
+        .update({ ended_at: new Date().toISOString(), duration_minutes: 0 })
+        .eq("trip_id", trip.id)
+        .is("ended_at", null);
+      try {
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-trip-status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_ANON_KEY },
+          body: JSON.stringify({ trip_id: trip.id, driver_id: trip.driver_id, action: "ended" }),
+        });
+      } catch {}
+    }
   }
 
   function TripCard({ trip, showControls }) {
