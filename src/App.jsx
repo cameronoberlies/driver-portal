@@ -2134,6 +2134,15 @@ function MileageCostReport({
 }
 
 // ─── LIVE DRIVERS MAP ─────────────────────────────────────────────────────────
+// obd_speed/rpm/fuel are upserted independently of the row's `updated_at`,
+// so a frozen telemetry value can ride along behind fresh lat/lng writes
+// for hours. Treat OBD as stale if it hasn't been refreshed in 2 minutes.
+const OBD_FRESH_MS = 120000;
+function isObdFresh(loc) {
+  if (!loc?.obd_updated_at) return false;
+  return Date.now() - new Date(loc.obd_updated_at).getTime() < OBD_FRESH_MS;
+}
+
 function LiveDriversMap({ drivers }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -2324,7 +2333,7 @@ function LiveDriversMap({ drivers }) {
             <div style="font-size: 11px; color: #6b7585; letter-spacing: 1px;">LAST UPDATE</div>
             <div style="font-size: 13px; font-weight: 600; color: ${color};">${ageLabel}</div>
             ${stopInfo}
-            ${loc.obd_speed != null ? `<div style="font-size: 11px; color: #6b7585; letter-spacing: 1px; margin-top: 6px;">VEHICLE</div><div style="font-size: 13px; font-weight: 600;">${loc.obd_speed} mph${loc.obd_rpm != null ? ` · ${loc.obd_rpm.toLocaleString()} rpm` : ""}${loc.obd_fuel != null ? ` · ⛽ ${loc.obd_fuel}%` : ""}</div>` : ""}
+            ${isObdFresh(loc) && loc.obd_speed != null ? `<div style="font-size: 11px; color: #6b7585; letter-spacing: 1px; margin-top: 6px;">VEHICLE</div><div style="font-size: 13px; font-weight: 600;">${loc.obd_speed} mph${loc.obd_rpm != null ? ` · ${loc.obd_rpm.toLocaleString()} rpm` : ""}${loc.obd_fuel != null ? ` · ⛽ ${loc.obd_fuel}%` : ""}</div>` : ""}
             <div style="font-size: 12px; color: #f5a623; font-weight: 600; margin-top: 6px;">${etaLabel}</div>
           </div>
         `,
@@ -2472,12 +2481,12 @@ function LiveDriversMap({ drivers }) {
                 <span style={{ fontSize: 12, fontWeight: 700 }}>
                   {driver?.name ?? "Unknown"}
                 </span>
-                {loc.obd_speed != null && (
+                {isObdFresh(loc) && loc.obd_speed != null && (
                   <span style={{ fontSize: 11, fontWeight: 700, color: loc.obd_speed > 80 ? "var(--danger)" : "var(--text)" }}>
                     {loc.obd_speed} mph
                   </span>
                 )}
-                {loc.obd_fuel != null && (
+                {isObdFresh(loc) && loc.obd_fuel != null && (
                   <span style={{ fontSize: 11, color: loc.obd_fuel < 15 ? "var(--danger)" : "var(--muted)" }}>
                     ⛽ {loc.obd_fuel}%
                   </span>
@@ -2814,7 +2823,7 @@ function WebTripLogs({ drivers }) {
           }}>
             {(() => {
               const driverLoc = mode === "live" && typeof locations !== "undefined" ? locations.find(l => l.driver_id === (trip.designated_driver_id || trip.driver_id)) : null;
-              return driverLoc?.obd_speed != null ? (
+              return isObdFresh(driverLoc) && driverLoc?.obd_speed != null ? (
                 <div style={{ display: "flex", gap: 12, marginBottom: 8, padding: "6px 10px", background: "rgba(74,144,226,0.06)", border: "1px solid rgba(74,144,226,0.2)", borderRadius: 4, fontSize: 12 }}>
                   <span style={{ fontWeight: 700, color: driverLoc.obd_speed > 80 ? "var(--danger)" : "var(--text)" }}>{driverLoc.obd_speed} mph</span>
                   {driverLoc.obd_rpm != null && <span style={{ color: "var(--muted)" }}>{driverLoc.obd_rpm.toLocaleString()} rpm</span>}
