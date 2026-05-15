@@ -1754,6 +1754,16 @@ function MileageCostReport({
   // Variance = (actual - estimated) for purchased vehicles + turned down loss + additional recon
   const variance = (totalActual - totalEstimated) + turnedDownEstimated + additionalReconTotal;
 
+  // Itemized cost rollups for the active range — same `filtered` set so they
+  // line up with the KPI cards above.
+  const itemizedTotals = {
+    flight: filtered.reduce((s, e) => s + Number(e.flight_cost ?? 0), 0),
+    rideshare: filtered.reduce((s, e) => s + Number(e.rideshare_cost ?? 0), 0),
+    fuel: filtered.reduce((s, e) => s + Number(e.fuel_cost ?? 0), 0),
+    other: filtered.reduce((s, e) => s + Number(e.other_cost ?? 0), 0),
+    additional_recon: additionalReconTotal,
+  };
+
   const sameYear = rangeStart.getFullYear() === rangeEnd.getFullYear();
   const periodLabel = `${rangeStart.toLocaleDateString("en-US", { month: "short", day: "numeric", year: sameYear ? undefined : "numeric" })} – ${rangeEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
 
@@ -1880,6 +1890,30 @@ function MileageCostReport({
             <div className="stat-sub">{s.sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* Itemized cost breakdown */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-md)", padding: 16, marginBottom: 20 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, color: "var(--muted)", marginBottom: 12, textTransform: "uppercase" }}>
+          Itemized Breakdown · {periodLabel}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+          {[
+            { label: "Flight", value: itemizedTotals.flight, color: "var(--accent2)" },
+            { label: "Rideshare", value: itemizedTotals.rideshare, color: "var(--accent2)" },
+            { label: "Fuel", value: itemizedTotals.fuel, color: "var(--accent)" },
+            { label: "Other", value: itemizedTotals.other, color: "var(--accent)" },
+            { label: "Additional Recon", value: itemizedTotals.additional_recon, color: "var(--danger)" },
+          ].filter(b => b.value > 0).map((b) => (
+            <div key={b.label} style={{ padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 4 }}>{b.label.toUpperCase()}</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: b.color }}>{formatCurrency(b.value)}</div>
+            </div>
+          ))}
+          {Object.values(itemizedTotals).every(v => v === 0) && (
+            <div style={{ fontSize: 12, color: "var(--muted)", padding: "8px 4px" }}>No itemized costs recorded in this period.</div>
+          )}
+        </div>
       </div>
 
       {/* Chart Tabs */}
@@ -4882,6 +4916,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
     destination_address: "",
     dealer_plate: "",
     chase_vehicle_stock: "",
+    estimated_cost: "",
     aa_stock_numbers: {},
     aa_driver_ids: [],
   });
@@ -5006,6 +5041,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
         stock_numbers: (form.aa_stock_numbers || {})[driverId] || null,
         destination_address: form.destination_address || null,
         dealer_plate: form.dealer_plate || null,
+        estimated_cost: Number(form.estimated_cost) || 0,
       }));
 
       const { data, error: err } = await supabase
@@ -5044,6 +5080,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
         carpage_link: "",
         notes: "",
         stock_numbers: "",
+        estimated_cost: "",
         aa_stock_numbers: {},
     aa_driver_ids: [],
       }));
@@ -5125,6 +5162,7 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
       destination_address: "",
       dealer_plate: "",
       chase_vehicle_stock: "",
+      estimated_cost: "",
       aa_stock_numbers: {},
     aa_driver_ids: [],
     }));
@@ -5399,6 +5437,18 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
               ))}
             </div>
           )}
+        </div>
+        <div className="field">
+          <label>Estimated Trip Cost ($) *</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0.00"
+            value={form.estimated_cost}
+            onChange={(e) => set("estimated_cost", e.target.value)}
+            required
+          />
         </div>
         <div className="field" style={{ gridColumn: "1 / -1" }}>
           <label>Notes</label>

@@ -120,6 +120,9 @@ export function validateTripForm(form) {
     if (!form.city) {
       return "Destination city is required for AA trips.";
     }
+    if (!form.estimated_cost || Number(form.estimated_cost) <= 0) {
+      return "Estimated trip cost is required.";
+    }
     return null;
   }
   if (!form.driver_id || !form.scheduled_pickup) {
@@ -130,6 +133,9 @@ export function validateTripForm(form) {
   }
   if (form.trip_type === "drive" && form.second_driver_id === form.driver_id) {
     return "Primary and second driver must be different.";
+  }
+  if (!form.estimated_cost || Number(form.estimated_cost) <= 0) {
+    return "Estimated trip cost is required.";
   }
   return null;
 }
@@ -144,6 +150,7 @@ export function buildTripPayload(form) {
     notes: form.notes || null,
     destination_address: form.destination_address || null,
     dealer_plate: form.dealer_plate || null,
+    estimated_cost: Number(form.estimated_cost) || 0,
     status: "pending",
   };
 
