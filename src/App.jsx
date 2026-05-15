@@ -1676,34 +1676,71 @@ function MiniPieChart({ data }) {
 }
 
 // ─── MILEAGE COST REPORT ──────────────────────────────────────────────────────
+const MILEAGE_RANGE_OPTIONS = ["1W", "1M", "3M", "6M", "1Y"];
+
+// Bucket helper: drives KPI window and trend chart x-axis points.
+// 1W=7 daily, 1M=4 weekly, 3M=12 weekly, 6M=6 monthly, 1Y=12 monthly.
+function getMileageRangeBuckets(range) {
+  const now = new Date();
+  const buckets = [];
+
+  if (range === "1W") {
+    for (let i = 6; i >= 0; i--) {
+      const start = new Date(now); start.setDate(now.getDate() - i); start.setHours(0, 0, 0, 0);
+      const end = new Date(start); end.setHours(23, 59, 59, 999);
+      buckets.push({ start, end, label: start.toLocaleDateString("en-US", { weekday: "short" }) });
+    }
+  } else if (range === "1M") {
+    for (let i = 3; i >= 0; i--) {
+      const end = new Date(now); end.setDate(now.getDate() - i * 7); end.setHours(23, 59, 59, 999);
+      const start = new Date(end); start.setDate(end.getDate() - 6); start.setHours(0, 0, 0, 0);
+      buckets.push({ start, end, label: start.toLocaleDateString("en-US", { month: "short", day: "numeric" }) });
+    }
+  } else if (range === "3M") {
+    for (let i = 11; i >= 0; i--) {
+      const end = new Date(now); end.setDate(now.getDate() - i * 7); end.setHours(23, 59, 59, 999);
+      const start = new Date(end); start.setDate(end.getDate() - 6); start.setHours(0, 0, 0, 0);
+      buckets.push({ start, end, label: i % 3 === 0 ? start.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "" });
+    }
+  } else if (range === "6M") {
+    for (let i = 5; i >= 0; i--) {
+      const start = new Date(now.getFullYear(), now.getMonth() - i, 1, 0, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
+      buckets.push({ start, end, label: start.toLocaleDateString("en-US", { month: "short" }) });
+    }
+  } else { // 1Y
+    for (let i = 11; i >= 0; i--) {
+      const start = new Date(now.getFullYear(), now.getMonth() - i, 1, 0, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999);
+      buckets.push({ start, end, label: i % 2 === 0 ? start.toLocaleDateString("en-US", { month: "short" }) : "" });
+    }
+  }
+
+  return { rangeStart: buckets[0].start, rangeEnd: buckets[buckets.length - 1].end, buckets };
+}
+
 function MileageCostReport({
   entries,
   drivers,
   allProfiles,
   trips,
-  thisMonth,
-  wkStart,
-  wkEnd,
 }) {
-  const [reportType, setReportType] = useState("weekly");
+  const [range, setRange] = useState("1W");
   const [selectedDriver, setSelectedDriver] = useState("all");
   const [activeChart, setActiveChart] = useState(0);
 
+  const { rangeStart, rangeEnd, buckets } = getMileageRangeBuckets(range);
+
   const filtered = entries.filter((e) => {
-    const inPeriod =
-      reportType === "weekly"
-        ? (() => {
-            const d = new Date(e.date + "T12:00:00");
-            return d >= wkStart && d <= wkEnd;
-          })()
-        : getMonth(e.date) === thisMonth;
+    const d = new Date(e.date + "T12:00:00");
+    const inPeriod = d >= rangeStart && d <= rangeEnd;
     const inDriver = selectedDriver === "all" || e.driver_id === selectedDriver;
     return inPeriod && inDriver;
   });
 
   const weekFiltered = entries.filter((e) => {
     const d = new Date(e.date + "T12:00:00");
-    return d >= wkStart && d <= wkEnd;
+    return d >= rangeStart && d <= rangeEnd;
   });
 
   const totalActual = filtered.reduce((s, e) => s + Number(e.actual_cost ?? 0), 0);
@@ -1717,82 +1754,40 @@ function MileageCostReport({
   // Variance = (actual - estimated) for purchased vehicles + turned down loss + additional recon
   const variance = (totalActual - totalEstimated) + turnedDownEstimated + additionalReconTotal;
 
-  const periodLabel =
-    reportType === "weekly"
-      ? `${wkStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${wkEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
-      : new Date(thisMonth + "-01").toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const sameYear = rangeStart.getFullYear() === rangeEnd.getFullYear();
+  const periodLabel = `${rangeStart.toLocaleDateString("en-US", { month: "short", day: "numeric", year: sameYear ? undefined : "numeric" })} – ${rangeEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
 
-  // ── Helper: get week bounds N weeks ago ──
-  function getWeekBoundsAgo(weeksAgo) {
-    const d = new Date();
-    d.setDate(d.getDate() - weeksAgo * 7);
-    return getWeekBounds(d);
-  }
+  // ── Bucketed entry aggregates: one pass, all trend charts read from it ──
+  const bucketAggregates = buckets.map((b) => {
+    const inBucket = entries.filter((e) => {
+      const d = new Date(e.date + "T12:00:00");
+      return d >= b.start && d <= b.end;
+    });
+    const miles = inBucket.reduce((t, e) => t + Number(e.miles ?? 0), 0);
+    const actual = inBucket.reduce((t, e) => t + Number(e.actual_cost ?? 0), 0);
+    const estimated = inBucket.reduce((t, e) => t + Number(e.estimated_cost ?? 0), 0);
+    return { label: b.label, miles, actual, estimated, cpm: miles > 0 ? parseFloat((actual / miles).toFixed(2)) : 0 };
+  });
 
-  // ── Chart 1: Cost Variance Trend (8 weeks) ──
-  const varianceTrend = (() => {
-    const weeks = [];
-    for (let i = 7; i >= 0; i--) {
-      const { start, end } = getWeekBoundsAgo(i);
-      const wkEntries = entries.filter((e) => {
-        const d = new Date(e.date + "T12:00:00");
-        return d >= start && d <= end;
-      });
-      weeks.push({
-        label: start.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        actual: wkEntries.reduce((t, e) => t + Number(e.actual_cost ?? 0), 0),
-        estimated: wkEntries.reduce((t, e) => t + Number(e.estimated_cost ?? 0), 0),
-      });
-    }
-    return weeks;
-  })();
+  // ── Chart 1: Cost Variance Trend ──
+  const varianceTrend = bucketAggregates;
 
-  // ── Chart 2: Weekly Mileage Trend (8 weeks) ──
-  const milesTrend = (() => {
-    const weeks = [];
-    for (let i = 7; i >= 0; i--) {
-      const { start, end } = getWeekBoundsAgo(i);
-      const wkEntries = entries.filter((e) => {
-        const d = new Date(e.date + "T12:00:00");
-        return d >= start && d <= end;
-      });
-      weeks.push({
-        label: start.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        miles: wkEntries.reduce((t, e) => t + Number(e.miles ?? 0), 0),
-      });
-    }
-    return weeks;
-  })();
+  // ── Chart 2: Mileage Trend ──
+  const milesTrend = bucketAggregates;
 
-  // ── Chart 3: Cost per Mile (total, 8 weeks) ──
+  // ── Chart 3: Cost per Mile ──
   const totalCostPerMile = totalMiles > 0 ? totalActual / totalMiles : 0;
-  const efficiencyTrend = (() => {
-    const weeks = [];
-    for (let i = 7; i >= 0; i--) {
-      const { start, end } = getWeekBoundsAgo(i);
-      const wkEntries = entries.filter((e) => {
-        const d = new Date(e.date + "T12:00:00");
-        return d >= start && d <= end;
-      });
-      const miles = wkEntries.reduce((t, e) => t + Number(e.miles ?? 0), 0);
-      const actual = wkEntries.reduce((t, e) => t + Number(e.actual_cost ?? 0), 0);
-      weeks.push({
-        label: start.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        cpm: miles > 0 ? parseFloat((actual / miles).toFixed(2)) : 0,
-      });
-    }
-    return weeks;
-  })();
+  const efficiencyTrend = bucketAggregates;
 
   // ── Chart 4: Trip Type Breakdown (pie) ──
   const tripTypeData = (() => {
-    const weekTrips = (trips ?? []).filter((t) => {
+    const rangeTrips = (trips ?? []).filter((t) => {
       if (!t.actual_start) return false;
       const d = new Date(t.actual_start);
-      return d >= wkStart && d <= wkEnd;
+      return d >= rangeStart && d <= rangeEnd;
     });
-    const flyCount = weekTrips.filter((t) => t.trip_type === "fly").length;
-    const driveCount = weekTrips.filter((t) => t.trip_type === "drive").length;
+    const flyCount = rangeTrips.filter((t) => t.trip_type === "fly").length;
+    const driveCount = rangeTrips.filter((t) => t.trip_type === "drive").length;
     if (flyCount === 0 && driveCount === 0) return [];
     return [
       flyCount > 0 && { label: `Fly (${flyCount})`, value: flyCount, color: "var(--accent2)" },
@@ -1800,14 +1795,18 @@ function MileageCostReport({
     ].filter(Boolean);
   })();
 
-  // ── Chart 5: Speed by Driver Over Time ──
+  // ── Chart 5: Speed by Driver Over Time (within range) ──
   const [speedDriver, setSpeedDriver] = useState("all");
   const speedData = (() => {
     const tripsWithSpeed = (trips ?? [])
       .filter(t => t.speed_data && t.actual_start)
+      .filter(t => {
+        const d = new Date(t.actual_start);
+        return d >= rangeStart && d <= rangeEnd;
+      })
       .filter(t => speedDriver === "all" || t.driver_id === speedDriver || t.designated_driver_id === speedDriver)
       .sort((a, b) => new Date(a.actual_start) - new Date(b.actual_start))
-      .slice(-15);
+      .slice(-20);
     return tripsWithSpeed;
   })();
 
@@ -1833,10 +1832,29 @@ function MileageCostReport({
         >
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Period</label>
-            <select value={reportType} onChange={(e) => setReportType(e.target.value)}>
-              <option value="weekly">This Week</option>
-              <option value="monthly">This Month</option>
-            </select>
+            <div style={{ display: "flex", gap: 6 }}>
+              {MILEAGE_RANGE_OPTIONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRange(r)}
+                  style={{
+                    flex: 1,
+                    padding: "8px 0",
+                    background: range === r ? "rgba(232,180,74,0.15)" : "var(--bg)",
+                    border: `1px solid ${range === r ? "rgba(232,180,74,0.4)" : "var(--border)"}`,
+                    color: range === r ? "var(--accent)" : "var(--muted)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: 1,
+                    fontFamily: "var(--font-head)",
+                    cursor: "pointer",
+                    borderRadius: "var(--radius-sm)",
+                  }}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
           </div>
           <button
             className="btn btn-primary"
@@ -1896,7 +1914,7 @@ function MileageCostReport({
         {activeChart === 0 && (
           <div>
             <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: 2, fontWeight: 700, marginBottom: 16, textAlign: "center", textTransform: "uppercase" }}>
-              Cost Variance Trend (8 Weeks)
+              Cost Variance Trend
             </div>
             <div style={{ display: "flex", justifyContent: "center", gap: 20, marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1921,7 +1939,7 @@ function MileageCostReport({
         {activeChart === 1 && (
           <div>
             <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: 2, fontWeight: 700, marginBottom: 16, textAlign: "center", textTransform: "uppercase" }}>
-              Weekly Mileage Trend (8 Weeks)
+              Mileage Trend
             </div>
             <MiniLineChart
               labels={milesTrend.map((w) => w.label)}
@@ -1935,10 +1953,10 @@ function MileageCostReport({
         {activeChart === 2 && (
           <div>
             <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: 2, fontWeight: 700, marginBottom: 16, textAlign: "center", textTransform: "uppercase" }}>
-              Cost per Mile (8 Weeks)
+              Cost per Mile
             </div>
             <div style={{ textAlign: "center", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
-              <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 2, fontWeight: 700 }}>THIS WEEK</div>
+              <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 2, fontWeight: 700 }}>{range}</div>
               <div style={{ fontSize: 28, fontWeight: 900, color: "var(--success)" }}>{formatCurrency(totalCostPerMile)}/mi</div>
               <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>{totalMiles.toFixed(0)} mi · {formatCurrency(totalActual)} actual</div>
             </div>
@@ -1954,10 +1972,10 @@ function MileageCostReport({
         {activeChart === 3 && (
           <div>
             <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: 2, fontWeight: 700, marginBottom: 16, textAlign: "center", textTransform: "uppercase" }}>
-              Trip Type Breakdown (This Week)
+              Trip Type Breakdown
             </div>
             {tripTypeData.length === 0 ? (
-              <div style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: "40px 0" }}>No trips this week</div>
+              <div style={{ color: "var(--muted)", fontSize: 13, textAlign: "center", padding: "40px 0" }}>No trips in this range</div>
             ) : (
               <MiniPieChart data={tripTypeData} />
             )}
@@ -4726,9 +4744,6 @@ function AdminDashboard({
           drivers={drivers}
           allProfiles={allProfiles}
           trips={trips}
-          thisMonth={thisMonth}
-          wkStart={wkStart}
-          wkEnd={wkEnd}
         />
       )}
 
