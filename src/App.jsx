@@ -4006,6 +4006,8 @@ function AdminDashboard({
 
   const [form, setForm] = useState({
     driver_id: drivers[0]?.id || "",
+    second_driver_id: "",
+    pay2: "",
     date: now.toISOString().slice(0, 10),
     pay: "",
     hours: "",
@@ -4045,31 +4047,49 @@ function AdminDashboard({
       fuel_cost: form.fuel_cost ? Number(form.fuel_cost) : null,
       other_cost: form.other_cost ? Number(form.other_cost) : null,
     };
+    const baseEntry = {
+      date: form.date,
+      hours: Number(form.hours),
+      miles: form.miles ? Number(form.miles) : 0,
+      actual_cost: logActualCost,
+      estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
+      city: form.city,
+      crm_id: form.crm_id,
+      carpage_link: form.carpage_link || null,
+      trip_type: form.trip_type || null,
+      stock_numbers: form.stock_numbers || null,
+      recon_missed: form.recon_missed,
+      ...costFields,
+    };
     const { data, error } = await supabase
       .from("entries")
-      .insert({
-        driver_id: form.driver_id,
-        date: form.date,
-        pay: Number(form.pay),
-        hours: Number(form.hours),
-        miles: form.miles ? Number(form.miles) : 0,
-        actual_cost: logActualCost,
-        estimated_cost: form.estimated_cost ? Number(form.estimated_cost) : 0,
-        city: form.city,
-        crm_id: form.crm_id,
-        carpage_link: form.carpage_link || null,
-        trip_type: form.trip_type || null,
-        stock_numbers: form.stock_numbers || null,
-        recon_missed: form.recon_missed,
-        ...costFields,
-      })
+      .insert({ ...baseEntry, driver_id: form.driver_id, pay: Number(form.pay) })
       .select()
       .single();
     if (!error && data) {
-      setEntries((prev) => [...prev, data]);
+      const inserted = [data];
+      // Drive trips have two drivers — log a second entry for the partner so
+      // pay/hours show up on their dashboard too. Costs aren't duplicated.
+      if (form.trip_type === "drive" && form.second_driver_id) {
+        const { data: data2 } = await supabase
+          .from("entries")
+          .insert({
+            ...baseEntry,
+            driver_id: form.second_driver_id,
+            pay: form.pay2 ? Number(form.pay2) : 0,
+            flight_cost: null, rideshare_cost: null, fuel_cost: null, other_cost: null,
+            actual_cost: form.pay2 ? Number(form.pay2) : 0,
+          })
+          .select()
+          .single();
+        if (data2) inserted.push(data2);
+      }
+      setEntries((prev) => [...prev, ...inserted]);
       setForm((f) => ({
         ...f,
         pay: "",
+        pay2: "",
+        second_driver_id: "",
         hours: "",
         miles: "",
         estimated_cost: "",
@@ -4396,6 +4416,39 @@ function AdminDashboard({
                         </option>
                       ))}
                     </select>
+                  </div>
+                )}
+                {form.trip_type === "drive" && (
+                  <div className="field">
+                    <label>Second Driver</label>
+                    <select
+                      value={form.second_driver_id}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, second_driver_id: e.target.value }))
+                      }
+                    >
+                      <option value="">— None —</option>
+                      {drivers
+                        .filter((d) => d.id !== form.driver_id)
+                        .map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name}{d.willing_to_fly ? ' (F)' : ''}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+                {form.trip_type === "drive" && form.second_driver_id && canSeePay && (
+                  <div className="field">
+                    <label>Pay — Second Driver ($)</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      value={form.pay2}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, pay2: e.target.value }))
+                      }
+                    />
                   </div>
                 )}
                 <div className="field">
