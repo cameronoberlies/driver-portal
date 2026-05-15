@@ -4156,7 +4156,7 @@ function AdminDashboard({
           { key: "trips", icon: "🚗", label: "Trips" },
           isAdmin && { key: "log entry", icon: "📝", label: "Log Entry" },
           { key: "all entries", icon: "📋", label: "All Entries" },
-          { key: "mileage costs", icon: "⛽", label: "Mileage Costs" },
+          { key: "mileage costs", icon: "📊", label: "Analytics" },
           { key: "availability", icon: "📅", label: "Availability" },
           { key: "capacity", icon: "📋", label: "Capacity" },
           { key: "live drivers", icon: "📍", label: "Live Drivers" },
