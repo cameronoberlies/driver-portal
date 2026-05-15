@@ -4054,10 +4054,15 @@ function AdminDashboard({
     if (newPay2) setForm((f) => ({ ...f, pay2: newPay2 }));
   }, [form.second_driver_id, form.hours, form.trip_type]);
 
-  // Compute actual cost from itemized fields + driver pay for log entry
+  // Driver 1's actual_cost on their entry = pay1 + all itemized shared costs.
+  // Driver 2's actual_cost on their entry = pay2 only (shared costs aren't
+  // duplicated). Sum across both rows = correct total business cost.
   const logActualCost = [
     form.flight_cost, form.rideshare_cost, form.fuel_cost, form.other_cost, form.pay,
   ].reduce((sum, v) => sum + (Number(v) || 0), 0);
+  // Form-only preview that includes both drivers' pay so the user sees the
+  // full trip cost while filling out the form.
+  const logActualCostTotal = logActualCost + (Number(form.pay2) || 0);
 
   async function handleSubmit() {
     if (!form.driver_id || !form.date || (canSeePay && !form.pay)) return;
@@ -4580,7 +4585,7 @@ function AdminDashboard({
                   fontWeight: 700,
                 }}>
                   <span style={{ color: "var(--muted)" }}>Total Actual Cost</span>
-                  <span style={{ color: "var(--text)" }}>${logActualCost.toFixed(2)}</span>
+                  <span style={{ color: "var(--text)" }}>${logActualCostTotal.toFixed(2)}</span>
                 </div>
               </div>
               <div className="checkbox-row">
