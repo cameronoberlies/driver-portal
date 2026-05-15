@@ -1795,11 +1795,11 @@ function MileageCostReport({
     ].filter(Boolean);
   })();
 
-  // ── Chart 5: Speed by Driver Over Time (within range) ──
+  // ── Chart 5: Speed by Driver Over Time (within range, OBD trips only) ──
   const [speedDriver, setSpeedDriver] = useState("all");
   const speedData = (() => {
     const tripsWithSpeed = (trips ?? [])
-      .filter(t => t.speed_data && t.actual_start)
+      .filter(t => t.obd_data?.max_speed != null && t.actual_start)
       .filter(t => {
         const d = new Date(t.actual_start);
         return d >= rangeStart && d <= rangeEnd;
@@ -2022,8 +2022,8 @@ function MileageCostReport({
                 <MiniLineChart
                   labels={speedData.map(t => new Date(t.actual_start).toLocaleDateString("en-US", { month: "numeric", day: "numeric" }))}
                   datasets={[
-                    { data: speedData.map(t => t.speed_data.top_speed || 0), color: "var(--danger)" },
-                    { data: speedData.map(t => t.speed_data.avg_speed || 0), color: "var(--accent)" },
+                    { data: speedData.map(t => t.obd_data?.max_speed || 0), color: "var(--danger)" },
+                    { data: speedData.map(t => t.obd_data?.avg_speed || 0), color: "var(--accent)" },
                   ]}
                 />
                 <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 12 }}>
@@ -2798,19 +2798,6 @@ function WebTripLogs({ drivers }) {
                 <div style={{ fontSize: 9, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5 }}>ELAPSED</div>
               </div>
             </div>
-
-            {mode === "history" && false && trip.speed_data && trip.speed_data.top_speed > 0 && (
-              <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: "var(--muted)" }}>
-                <span>⚡ {trip.speed_data.top_speed} mph <span style={{ color: "#555" }}>top</span></span>
-                <span>{trip.speed_data.avg_speed} mph <span style={{ color: "#555" }}>avg</span></span>
-                {trip.speed_data.seconds_over_80 > 0 && (
-                  <span style={{ color: "var(--accent)", fontWeight: 700 }}>{Math.round(trip.speed_data.seconds_over_80 / 60)}m &gt;80</span>
-                )}
-                {trip.speed_data.seconds_over_90 > 0 && (
-                  <span style={{ color: "var(--danger)", fontWeight: 700 }}>{Math.round(trip.speed_data.seconds_over_90 / 60)}m &gt;90</span>
-                )}
-              </div>
-            )}
 
             {activeStop && (
               <div style={{
@@ -5843,6 +5830,13 @@ function TripDetailModal({ trip, allProfiles, photoCounts, onClose, onFinalize, 
                   <div style={{ fontSize: 11, color: "var(--muted)" }}>mph</div>
                 </div>
               )}
+              {trip.obd_data.avg_speed != null && (
+                <div style={{ padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>AVG SPEED</div>
+                  <div style={{ fontSize: 20, fontWeight: 900 }}>{trip.obd_data.avg_speed}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>mph</div>
+                </div>
+              )}
               {trip.obd_data.max_rpm != null && (
                 <div style={{ padding: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", letterSpacing: 1.5, marginBottom: 4 }}>MAX RPM</div>
@@ -5860,18 +5854,30 @@ function TripDetailModal({ trip, allProfiles, photoCounts, onClose, onFinalize, 
             </div>
 
             {/* Safety events */}
-            {(trip.obd_data.hard_brakes > 0 || trip.obd_data.hard_accelerations > 0) && (
-              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {(trip.obd_data.hard_brakes > 0 || trip.obd_data.hard_accelerations > 0 || trip.obd_data.seconds_over_80 > 0 || trip.obd_data.seconds_over_90 > 0) && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
                 {trip.obd_data.hard_brakes > 0 && (
-                  <div style={{ flex: 1, padding: 10, background: "rgba(245,166,35,0.06)", border: "1px solid rgba(245,166,35,0.2)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                  <div style={{ flex: 1, minWidth: 120, padding: 10, background: "rgba(245,166,35,0.06)", border: "1px solid rgba(245,166,35,0.2)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
                     <div style={{ fontSize: 18, fontWeight: 900, color: "var(--accent)" }}>{trip.obd_data.hard_brakes}</div>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)", letterSpacing: 1.5 }}>HARD BRAKES</div>
                   </div>
                 )}
                 {trip.obd_data.hard_accelerations > 0 && (
-                  <div style={{ flex: 1, padding: 10, background: "rgba(245,166,35,0.06)", border: "1px solid rgba(245,166,35,0.2)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                  <div style={{ flex: 1, minWidth: 120, padding: 10, background: "rgba(245,166,35,0.06)", border: "1px solid rgba(245,166,35,0.2)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
                     <div style={{ fontSize: 18, fontWeight: 900, color: "var(--accent)" }}>{trip.obd_data.hard_accelerations}</div>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)", letterSpacing: 1.5 }}>HARD ACCELS</div>
+                  </div>
+                )}
+                {trip.obd_data.seconds_over_80 > 0 && (
+                  <div style={{ flex: 1, minWidth: 120, padding: 10, background: "rgba(245,166,35,0.06)", border: "1px solid rgba(245,166,35,0.2)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "var(--accent)" }}>{Math.round(trip.obd_data.seconds_over_80 / 60)}m</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)", letterSpacing: 1.5 }}>OVER 80 MPH</div>
+                  </div>
+                )}
+                {trip.obd_data.seconds_over_90 > 0 && (
+                  <div style={{ flex: 1, minWidth: 120, padding: 10, background: "rgba(232,90,74,0.06)", border: "1px solid rgba(232,90,74,0.2)", borderRadius: "var(--radius-sm)", textAlign: "center" }}>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: "var(--danger)" }}>{Math.round(trip.obd_data.seconds_over_90 / 60)}m</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--danger)", letterSpacing: 1.5 }}>OVER 90 MPH</div>
                   </div>
                 )}
               </div>
@@ -6324,65 +6330,6 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose, canSeePay 
             )}
           </div>
         </div>
-        {/* Speed Analytics */}
-        {false && trip.speed_data && trip.speed_data.top_speed > 0 && (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gap: 10,
-            marginBottom: 16,
-          }}>
-            <div style={{
-              background: "var(--bg)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius-sm)",
-              padding: "12px 14px",
-              textAlign: "center",
-            }}>
-              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 4 }}>TOP SPEED</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text)" }}>{trip.speed_data.top_speed}</div>
-              <div style={{ fontSize: 10, color: "var(--muted)" }}>mph</div>
-            </div>
-            <div style={{
-              background: "var(--bg)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius-sm)",
-              padding: "12px 14px",
-              textAlign: "center",
-            }}>
-              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 4 }}>AVG SPEED</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text)" }}>{trip.speed_data.avg_speed}</div>
-              <div style={{ fontSize: 10, color: "var(--muted)" }}>mph</div>
-            </div>
-            <div style={{
-              background: trip.speed_data.seconds_over_80 > 0 ? "rgba(232,180,74,0.08)" : "var(--bg)",
-              border: `1px solid ${trip.speed_data.seconds_over_80 > 0 ? "rgba(232,180,74,0.25)" : "var(--border)"}`,
-              borderRadius: "var(--radius-sm)",
-              padding: "12px 14px",
-              textAlign: "center",
-            }}>
-              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 4 }}>OVER 80</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: trip.speed_data.seconds_over_80 > 0 ? "var(--accent)" : "var(--muted)" }}>
-                {Math.round(trip.speed_data.seconds_over_80 / 60)}
-              </div>
-              <div style={{ fontSize: 10, color: "var(--muted)" }}>min</div>
-            </div>
-            <div style={{
-              background: trip.speed_data.seconds_over_90 > 0 ? "rgba(232,90,74,0.08)" : "var(--bg)",
-              border: `1px solid ${trip.speed_data.seconds_over_90 > 0 ? "rgba(232,90,74,0.25)" : "var(--border)"}`,
-              borderRadius: "var(--radius-sm)",
-              padding: "12px 14px",
-              textAlign: "center",
-            }}>
-              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 4 }}>OVER 90</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: trip.speed_data.seconds_over_90 > 0 ? "var(--danger)" : "var(--muted)" }}>
-                {Math.round(trip.speed_data.seconds_over_90 / 60)}
-              </div>
-              <div style={{ fontSize: 10, color: "var(--muted)" }}>min</div>
-            </div>
-          </div>
-        )}
-
         <div className="form-grid">
           {canSeePay && (
             <div className="field">
