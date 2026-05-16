@@ -1728,14 +1728,26 @@ function MileageCostReport({
   const [range, setRange] = useState("1W");
   const [selectedDriver, setSelectedDriver] = useState("all");
   const [activeChart, setActiveChart] = useState(0);
+  const [tripFilter, setTripFilter] = useState("all"); // all | drive | fly
 
   const { rangeStart, rangeEnd, buckets } = getMileageRangeBuckets(range);
+
+  // Drive bucket includes drive/aa/courier (all road trips). Fly bucket
+  // includes fly/airport. Entries with no trip_type fall through any non-"all"
+  // filter so historical manual entries don't pollute filtered totals.
+  function matchesTripFilter(tripType) {
+    if (tripFilter === "all") return true;
+    if (tripFilter === "drive") return ["drive", "aa", "courier"].includes(tripType);
+    if (tripFilter === "fly") return ["fly", "airport"].includes(tripType);
+    return true;
+  }
 
   const filtered = entries.filter((e) => {
     const d = new Date(e.date + "T12:00:00");
     const inPeriod = d >= rangeStart && d <= rangeEnd;
     const inDriver = selectedDriver === "all" || e.driver_id === selectedDriver;
-    return inPeriod && inDriver;
+    const inType = matchesTripFilter(e.trip_type);
+    return inPeriod && inDriver && inType;
   });
 
   const weekFiltered = entries.filter((e) => {
@@ -1771,7 +1783,7 @@ function MileageCostReport({
   const bucketAggregates = buckets.map((b) => {
     const inBucket = entries.filter((e) => {
       const d = new Date(e.date + "T12:00:00");
-      return d >= b.start && d <= b.end;
+      return d >= b.start && d <= b.end && matchesTripFilter(e.trip_type);
     });
     const miles = inBucket.reduce((t, e) => t + Number(e.miles ?? 0), 0);
     const actual = inBucket.reduce((t, e) => t + Number(e.actual_cost ?? 0), 0);
@@ -1794,7 +1806,7 @@ function MileageCostReport({
     const rangeTrips = (trips ?? []).filter((t) => {
       if (!t.actual_start) return false;
       const d = new Date(t.actual_start);
-      return d >= rangeStart && d <= rangeEnd;
+      return d >= rangeStart && d <= rangeEnd && matchesTripFilter(t.trip_type);
     });
     const flyCount = rangeTrips.filter((t) => t.trip_type === "fly").length;
     const driveCount = rangeTrips.filter((t) => t.trip_type === "drive").length;
@@ -1814,6 +1826,7 @@ function MileageCostReport({
         const d = new Date(t.actual_start);
         return d >= rangeStart && d <= rangeEnd;
       })
+      .filter(t => matchesTripFilter(t.trip_type))
       .filter(t => speedDriver === "all" || t.driver_id === speedDriver || t.designated_driver_id === speedDriver)
       .sort((a, b) => new Date(a.actual_start) - new Date(b.actual_start))
       .slice(-20);
@@ -1830,6 +1843,37 @@ function MileageCostReport({
 
   return (
     <div className="fade-in">
+      {/* Trip type filter */}
+      <div className="form-card" style={{ marginBottom: 12, padding: 12 }}>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[
+            { key: "all", label: "All" },
+            { key: "drive", label: "🚗 Drive" },
+            { key: "fly", label: "✈ Fly" },
+          ].map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => setTripFilter(opt.key)}
+              style={{
+                flex: 1,
+                padding: "10px 0",
+                background: tripFilter === opt.key ? "rgba(232,180,74,0.15)" : "var(--bg)",
+                border: `1px solid ${tripFilter === opt.key ? "rgba(232,180,74,0.4)" : "var(--border)"}`,
+                color: tripFilter === opt.key ? "var(--accent)" : "var(--muted)",
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: 1.5,
+                fontFamily: "var(--font-head)",
+                cursor: "pointer",
+                borderRadius: "var(--radius-sm)",
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Controls */}
       <div className="form-card" style={{ marginBottom: 16, padding: 20 }}>
         <div
