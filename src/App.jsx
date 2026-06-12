@@ -3402,7 +3402,7 @@ function ManageUsers({ allProfiles, setAllProfiles, canSeePay, canManageUsers })
       return;
     }
 
-    const { data: profiles } = await supabase.from("profiles").select("*");
+    const { data: profiles } = await supabase.from("profiles").select("*").order("name");
     if (profiles) setAllProfiles(profiles);
 
     setSaving(false);
@@ -3457,7 +3457,7 @@ function ManageUsers({ allProfiles, setAllProfiles, canSeePay, canManageUsers })
       return;
     }
 
-    const { data: profiles } = await supabase.from("profiles").select("*");
+    const { data: profiles } = await supabase.from("profiles").select("*").order("name");
     if (profiles) setAllProfiles(profiles);
     setDeleting(null);
     setSelectedDriver(null);
@@ -8740,7 +8740,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     async function loadData() {
-      const { data: profiles } = await supabase.from("profiles").select("*");
+      const { data: profiles } = await supabase.from("profiles").select("*").order("name");
       if (profiles) setAllProfiles(profiles);
 
       let query = supabase
@@ -8770,7 +8770,7 @@ export default function App() {
   const refreshData = async () => {
     if (!user) return;
     const [{ data: profiles }, { data: entryData }, { data: tripData }] = await Promise.all([
-      supabase.from("profiles").select("*"),
+      supabase.from("profiles").select("*").order("name"),
       user.role === "driver"
         ? supabase.from("entries").select("*").eq("driver_id", user.id).order("date", { ascending: false })
         : supabase.from("entries").select("*").order("date", { ascending: false }),
