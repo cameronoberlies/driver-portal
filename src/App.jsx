@@ -4545,6 +4545,19 @@ function AdminDashboard({
                     />
                   </div>
                 )}
+                {form.trip_type && form.trip_type !== "aa" && form.trip_type !== "airport" && (
+                  <div className="field">
+                    <label>Vehicle Stock #</label>
+                    <input
+                      type="text"
+                      placeholder="STK12345"
+                      value={form.stock_numbers}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, stock_numbers: e.target.value }))
+                      }
+                    />
+                  </div>
+                )}
                 <div className="field" style={{ gridColumn: "1 / -1" }}>
                   <label>Carpage Link</label>
                   <input
@@ -5074,6 +5087,8 @@ function CreateTrip({ drivers, onCreated, prefillData, onPrefillConsumed }) {
     if (prefillData.notes) set("notes", prefillData.notes);
     if (prefillData.scheduled_pickup)
       set("scheduled_pickup", prefillData.scheduled_pickup);
+    if (prefillData.destination_address)
+      set("destination_address", prefillData.destination_address);
     if (prefillData.carpage_link) set("carpage_link", prefillData.carpage_link);
     if (onPrefillConsumed) onPrefillConsumed();
   }, [prefillData]);
@@ -6563,6 +6578,17 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose, canSeePay 
               onChange={(e) => set("estimated_cost", e.target.value)}
             />
           </div>
+          {trip.trip_type !== "aa" && trip.trip_type !== "airport" && (
+            <div className="field">
+              <label>Vehicle Stock #</label>
+              <input
+                type="text"
+                placeholder="STK12345"
+                value={form.stock_numbers}
+                onChange={(e) => set("stock_numbers", e.target.value)}
+              />
+            </div>
+          )}
         </div>
 
         {/* ── Itemized Cost Breakdown ── */}
