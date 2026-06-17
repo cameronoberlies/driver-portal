@@ -6286,7 +6286,50 @@ function VehiclePhotosModal({ tripId, tripLabel, onClose }) {
   );
 }
 
-function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose, canSeePay = true }) {
+function FinalizeTripModal({ trip: tripProp, allProfiles, onFinalized, onClose, canSeePay = true }) {
+  // Shadow the prop in local state so Grace can fix wrong trip info (date,
+  // crm_id, type, drivers) inline before finalizing without bouncing modals.
+  // All existing references to `trip` keep working — they now read local
+  // state, which means every render reflects her edits immediately.
+  const [trip, setTrip] = useState(tripProp);
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [infoForm, setInfoForm] = useState({
+    crm_id: trip.crm_id || "",
+    city: trip.city || "",
+    trip_type: trip.trip_type || "drive",
+    driver_id: trip.driver_id || "",
+    second_driver_id: trip.second_driver_id || "",
+    scheduled_pickup: (() => {
+      if (!trip.scheduled_pickup) return "";
+      const d = new Date(trip.scheduled_pickup);
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    })(),
+  });
+  const [savingInfo, setSavingInfo] = useState(false);
+  const allDrivers = allProfiles.filter((p) => p.role === "driver");
+
+  async function handleSaveInfo() {
+    if (!infoForm.driver_id) return;
+    setSavingInfo(true);
+    const updates = {
+      crm_id: infoForm.crm_id,
+      city: infoForm.city,
+      trip_type: infoForm.trip_type,
+      driver_id: infoForm.driver_id,
+      designated_driver_id: infoForm.driver_id,
+      second_driver_id: infoForm.trip_type === "drive" ? (infoForm.second_driver_id || null) : null,
+      scheduled_pickup: infoForm.scheduled_pickup ? new Date(infoForm.scheduled_pickup).toISOString() : trip.scheduled_pickup,
+    };
+    const { data, error: err } = await supabase
+      .from("trips").update(updates).eq("id", trip.id).select().single();
+    setSavingInfo(false);
+    if (err || !data) return;
+    setTrip(data);
+    setEditingInfo(false);
+    if (onFinalized) {/* parent will refetch on its next interaction */}
+  }
+
   const driver1 = allProfiles.find((p) => p.id === trip.driver_id);
   const driver2 = trip.second_driver_id
     ? allProfiles.find((p) => p.id === trip.second_driver_id)
@@ -6515,17 +6558,84 @@ function FinalizeTripModal({ trip, allProfiles, onFinalized, onClose, canSeePay 
             fontSize: 13,
           }}
         >
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>
-            {trip.crm_id} — {trip.city}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, justifyContent: "space-between" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                {trip.crm_id || "(no CRM ID)"} — {trip.city || "(no city)"}
+              </div>
+              <div style={{ color: "var(--muted)", fontSize: 12 }}>
+                {driver1?.name || "(no driver)"}
+                {driver2 ? ` + ${driver2.name}` : ""} ·{" "}
+                {tripTypeLabel(trip.trip_type)}
+                {trip.scheduled_pickup && (
+                  <span style={{ marginLeft: 8 }}>· {new Date(trip.scheduled_pickup).toLocaleDateString("en-US", { month: "short", day: "numeric" })} {new Date(trip.scheduled_pickup).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
+                )}
+                {trip.actual_start && trip.actual_end && (
+                  <span style={{ marginLeft: 12 }}>⏱ {duration}h recorded</span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setEditingInfo((v) => !v)}
+              style={{
+                padding: "5px 12px", fontSize: 11, fontWeight: 700, letterSpacing: 1,
+                background: editingInfo ? "rgba(232,90,74,0.1)" : "var(--surface)",
+                border: `1px solid ${editingInfo ? "var(--danger)" : "var(--border)"}`,
+                color: editingInfo ? "var(--danger)" : "var(--muted)",
+                cursor: "pointer", borderRadius: "var(--radius-sm)", whiteSpace: "nowrap",
+              }}
+            >{editingInfo ? "Cancel" : "✏ Edit Info"}</button>
           </div>
-          <div style={{ color: "var(--muted)", fontSize: 12 }}>
-            {driver1?.name}
-            {driver2 ? ` + ${driver2.name}` : ""} ·{" "}
-            {tripTypeLabel(trip.trip_type)}
-            {trip.actual_start && trip.actual_end && (
-              <span style={{ marginLeft: 12 }}>⏱ {duration}h recorded</span>
-            )}
-          </div>
+
+          {editingInfo && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Date / Pickup Time</label>
+                  <input type="datetime-local" value={infoForm.scheduled_pickup} onChange={(e) => setInfoForm((f) => ({ ...f, scheduled_pickup: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Trip Type</label>
+                  <select value={infoForm.trip_type} onChange={(e) => setInfoForm((f) => ({ ...f, trip_type: e.target.value }))}>
+                    <option value="fly">✈ Fly</option>
+                    <option value="drive">🚗 Drive</option>
+                    <option value="courier">📦 Courier</option>
+                    <option value="airport">🛫 Airport</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Carpage ID</label>
+                  <input type="text" value={infoForm.crm_id} onChange={(e) => setInfoForm((f) => ({ ...f, crm_id: e.target.value.toUpperCase() }))} placeholder="GP123" />
+                </div>
+                <div className="field">
+                  <label>City</label>
+                  <input type="text" value={infoForm.city} onChange={(e) => setInfoForm((f) => ({ ...f, city: e.target.value }))} />
+                </div>
+                <div className="field">
+                  <label>Driver</label>
+                  <select value={infoForm.driver_id} onChange={(e) => setInfoForm((f) => ({ ...f, driver_id: e.target.value }))}>
+                    <option value="">— Select —</option>
+                    {allDrivers.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                  </select>
+                </div>
+                {infoForm.trip_type === "drive" && (
+                  <div className="field">
+                    <label>Second Driver</label>
+                    <select value={infoForm.second_driver_id} onChange={(e) => setInfoForm((f) => ({ ...f, second_driver_id: e.target.value }))}>
+                      <option value="">— None —</option>
+                      {allDrivers.filter((d) => d.id !== infoForm.driver_id).map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <button
+                className="btn btn-primary"
+                style={{ marginTop: 10, padding: "8px 14px", fontSize: 12 }}
+                onClick={handleSaveInfo}
+                disabled={savingInfo || !infoForm.driver_id}
+              >{savingInfo ? "Saving..." : "Save Trip Info"}</button>
+            </div>
+          )}
         </div>
         <div className="form-grid">
           {canSeePay && (
