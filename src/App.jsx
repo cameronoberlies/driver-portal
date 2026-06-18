@@ -4069,6 +4069,7 @@ function AdminDashboard({
     dealer_plate: "",
     chase_vehicle_stock: "",
     recon_missed: false,
+    turned_down: false,
   });
 
   useEffect(() => {
@@ -4129,6 +4130,7 @@ function AdminDashboard({
       trip_type: form.trip_type || null,
       stock_numbers: form.stock_numbers || null,
       recon_missed: form.recon_missed,
+      turned_down: form.turned_down,
       ...costFields,
     };
     const { data, error } = await supabase
@@ -4175,6 +4177,7 @@ function AdminDashboard({
         dealer_plate: "",
         chase_vehicle_stock: "",
         recon_missed: false,
+        turned_down: false,
       }));
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -4661,6 +4664,24 @@ function AdminDashboard({
                   }}
                 >
                   Driver Missed Recon (resets bonus streak)
+                </label>
+              </div>
+              <div className="checkbox-row">
+                <input
+                  type="checkbox"
+                  id="turned-down"
+                  checked={form.turned_down}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, turned_down: e.target.checked }))
+                  }
+                />
+                <label
+                  htmlFor="turned-down"
+                  style={{
+                    color: form.turned_down ? "var(--accent)" : "var(--text)",
+                  }}
+                >
+                  Vehicle Turned Down (no purchase — trip cost is a loss)
                 </label>
               </div>
               <button
