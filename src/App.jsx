@@ -1379,16 +1379,33 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
     pay: String(entry.pay),
     hours: String(entry.hours),
     miles: String(entry.miles ?? 0),
-    actual_cost: String(entry.actual_cost ?? 0),
     estimated_cost: String(entry.estimated_cost ?? 0),
+    flight_cost: entry.flight_cost != null ? String(entry.flight_cost) : "",
+    rideshare_cost: entry.rideshare_cost != null ? String(entry.rideshare_cost) : "",
+    fuel_cost: entry.fuel_cost != null ? String(entry.fuel_cost) : "",
+    other_cost: entry.other_cost != null ? String(entry.other_cost) : "",
     carpage_link: entry.carpage_link ?? "",
+    turned_down: !!entry.turned_down,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Same actual_cost formula as Log Entry — itemized + pay. Editing fuel,
+  // rideshare, etc. automatically reflows the total instead of leaving Grace
+  // to remember to update Actual Cost separately.
+  const computedActualCost = [
+    form.flight_cost, form.rideshare_cost, form.fuel_cost, form.other_cost, form.pay,
+  ].reduce((sum, v) => sum + (Number(v) || 0), 0);
+
   async function handleSave() {
     setSaving(true);
     setError("");
+    const costFields = {
+      flight_cost: form.flight_cost ? Number(form.flight_cost) : null,
+      rideshare_cost: form.rideshare_cost ? Number(form.rideshare_cost) : null,
+      fuel_cost: form.fuel_cost ? Number(form.fuel_cost) : null,
+      other_cost: form.other_cost ? Number(form.other_cost) : null,
+    };
     const { error: err } = await supabase
       .from("entries")
       .update({
@@ -1397,12 +1414,14 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
         pay: Number(form.pay),
         hours: Number(form.hours),
         miles: Number(form.miles),
-        actual_cost: Number(form.actual_cost),
+        actual_cost: computedActualCost,
         estimated_cost: Number(form.estimated_cost),
         carpage_link: form.carpage_link || null,
         city: form.city,
         crm_id: form.crm_id,
         recon_missed: form.recon_missed,
+        turned_down: form.turned_down,
+        ...costFields,
       })
       .eq("id", form.id);
     if (err) {
@@ -1415,9 +1434,10 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
       pay: Number(form.pay),
       hours: Number(form.hours),
       miles: Number(form.miles),
-      actual_cost: Number(form.actual_cost),
+      actual_cost: computedActualCost,
       estimated_cost: Number(form.estimated_cost),
       carpage_link: form.carpage_link || null,
+      ...costFields,
     });
     setSaving(false);
   }
@@ -1479,16 +1499,6 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
             />
           </div>
           <div className="field">
-            <label>Actual Cost ($)</label>
-            <input
-              type="number"
-              value={form.actual_cost}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, actual_cost: e.target.value }))
-              }
-            />
-          </div>
-          <div className="field">
             <label>Estimated Cost ($)</label>
             <input
               type="number"
@@ -1528,6 +1538,40 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
             />
           </div>
         </div>
+
+        {/* ── Itemized Cost Breakdown ── */}
+        <div style={{
+          marginTop: 12, padding: "12px 14px",
+          background: "var(--bg)", border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)",
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, color: "var(--muted)", marginBottom: 10 }}>
+            COST BREAKDOWN
+          </div>
+          <div className="form-grid">
+            <div className="field">
+              <label>Flight Ticket ($)</label>
+              <input type="number" placeholder="0.00" value={form.flight_cost} onChange={(e) => setForm((f) => ({ ...f, flight_cost: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Rideshare ($)</label>
+              <input type="number" placeholder="0.00" value={form.rideshare_cost} onChange={(e) => setForm((f) => ({ ...f, rideshare_cost: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Fuel ($)</label>
+              <input type="number" placeholder="0.00" value={form.fuel_cost} onChange={(e) => setForm((f) => ({ ...f, fuel_cost: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Other Expenses ($)</label>
+              <input type="number" placeholder="0.00" value={form.other_cost} onChange={(e) => setForm((f) => ({ ...f, other_cost: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border)", fontSize: 13, fontWeight: 700 }}>
+            <span style={{ color: "var(--muted)" }}>Total Actual Cost</span>
+            <span style={{ color: "var(--text)" }}>${computedActualCost.toFixed(2)}</span>
+          </div>
+        </div>
+
         <div className="checkbox-row" style={{ marginTop: 8 }}>
           <input
             type="checkbox"
@@ -1544,6 +1588,24 @@ function EditEntryModal({ entry, drivers, onSave, onClose }) {
             }}
           >
             Driver Missed Recon (resets bonus streak)
+          </label>
+        </div>
+        <div className="checkbox-row">
+          <input
+            type="checkbox"
+            id="edit-turned-down"
+            checked={form.turned_down}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, turned_down: e.target.checked }))
+            }
+          />
+          <label
+            htmlFor="edit-turned-down"
+            style={{
+              color: form.turned_down ? "var(--accent)" : "var(--text)",
+            }}
+          >
+            Vehicle Turned Down (no purchase — trip cost is a loss)
           </label>
         </div>
         {error && <div className="error-msg">{error}</div>}
