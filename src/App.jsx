@@ -6299,11 +6299,14 @@ function FinalizeTripModal({ trip: tripProp, allProfiles, onFinalized, onClose, 
     trip_type: trip.trip_type || "drive",
     driver_id: trip.driver_id || "",
     second_driver_id: trip.second_driver_id || "",
-    scheduled_pickup: (() => {
+    // Date-only — the time portion of scheduled_pickup is preserved on save.
+    // datetime-local was too finicky in the modal (clipping, segment-only
+    // editing) and date typos are the actual problem Grace fixes, not minutes.
+    scheduled_date: (() => {
       if (!trip.scheduled_pickup) return "";
       const d = new Date(trip.scheduled_pickup);
       const pad = (n) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     })(),
   });
   const [savingInfo, setSavingInfo] = useState(false);
@@ -6319,7 +6322,15 @@ function FinalizeTripModal({ trip: tripProp, allProfiles, onFinalized, onClose, 
       driver_id: infoForm.driver_id,
       designated_driver_id: infoForm.driver_id,
       second_driver_id: infoForm.trip_type === "drive" ? (infoForm.second_driver_id || null) : null,
-      scheduled_pickup: infoForm.scheduled_pickup ? new Date(infoForm.scheduled_pickup).toISOString() : trip.scheduled_pickup,
+      // Combine the edited date with the original time portion of scheduled_pickup
+      // so changing the day doesn't accidentally reset the pickup hour.
+      scheduled_pickup: (() => {
+        if (!infoForm.scheduled_date) return trip.scheduled_pickup;
+        const [y, m, d] = infoForm.scheduled_date.split("-").map(Number);
+        const orig = trip.scheduled_pickup ? new Date(trip.scheduled_pickup) : new Date();
+        orig.setFullYear(y, m - 1, d);
+        return orig.toISOString();
+      })(),
     };
     const { data, error: err } = await supabase
       .from("trips").update(updates).eq("id", trip.id).select().single();
@@ -6591,8 +6602,8 @@ function FinalizeTripModal({ trip: tripProp, allProfiles, onFinalized, onClose, 
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
               <div className="form-grid">
                 <div className="field">
-                  <label>Date / Pickup Time</label>
-                  <input type="datetime-local" value={infoForm.scheduled_pickup} onChange={(e) => setInfoForm((f) => ({ ...f, scheduled_pickup: e.target.value }))} />
+                  <label>Date</label>
+                  <input type="date" value={infoForm.scheduled_date} onChange={(e) => setInfoForm((f) => ({ ...f, scheduled_date: e.target.value }))} />
                 </div>
                 <div className="field">
                   <label>Trip Type</label>
