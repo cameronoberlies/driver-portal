@@ -8412,14 +8412,19 @@ function AdminAvailability({ drivers }) {
   const weekStart = getNextWeekStart().toISOString().slice(0, 10);
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editingDriver, setEditingDriver] = useState(null);
+
+  async function loadRecords() {
+    const { data } = await supabase
+      .from("availability")
+      .select("*")
+      .eq("week_start", weekStart);
+    setRecords(data ?? []);
+  }
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from("availability")
-        .select("*")
-        .eq("week_start", weekStart);
-      setRecords(data ?? []);
+      await loadRecords();
       setLoading(false);
     }
     load();
@@ -8511,7 +8516,18 @@ function AdminAvailability({ drivers }) {
               return (
                 <tr key={driver.id}>
                   <td style={{ fontWeight: 600 }}>
-                    {driver.name}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <button
+                        onClick={() => setEditingDriver(driver)}
+                        title="Edit availability"
+                        style={{
+                          padding: "3px 8px", fontSize: 10, fontWeight: 700, letterSpacing: 1,
+                          background: "var(--surface)", border: "1px solid var(--border)",
+                          color: "var(--muted)", cursor: "pointer", borderRadius: "var(--radius-sm)",
+                        }}
+                      >✏</button>
+                      <span>{driver.name}</span>
+                    </div>
                     {driver.willing_to_fly && <span style={{ color: "var(--accent)", marginLeft: 8, fontSize: 12, fontWeight: 700 }}>(F)</span>}
                     {rec?.updated_after_saturday && (
                       <span
@@ -8587,6 +8603,119 @@ function AdminAvailability({ drivers }) {
             })}
           </tbody>
         </table>
+      </div>
+
+      {editingDriver && (
+        <AdminAvailabilityEditModal
+          driver={editingDriver}
+          weekStart={weekStart}
+          existingRecord={records.find((r) => r.driver_id === editingDriver.id) || null}
+          onSaved={async () => {
+            await loadRecords();
+            setEditingDriver(null);
+          }}
+          onClose={() => setEditingDriver(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AdminAvailabilityEditModal({ driver, weekStart, existingRecord, onSaved, onClose }) {
+  const emptyAvail = {
+    sun: false, mon: false, tue: false, wed: false, thu: false, fri: false, sat: false,
+    sun_done_by: "", mon_done_by: "", tue_done_by: "", wed_done_by: "",
+    thu_done_by: "", fri_done_by: "", sat_done_by: "",
+  };
+  const [avail, setAvail] = useState(() => {
+    if (!existingRecord) return emptyAvail;
+    return {
+      sun: !!existingRecord.sun, mon: !!existingRecord.mon, tue: !!existingRecord.tue,
+      wed: !!existingRecord.wed, thu: !!existingRecord.thu, fri: !!existingRecord.fri,
+      sat: !!existingRecord.sat,
+      sun_done_by: existingRecord.sun_done_by ?? "",
+      mon_done_by: existingRecord.mon_done_by ?? "",
+      tue_done_by: existingRecord.tue_done_by ?? "",
+      wed_done_by: existingRecord.wed_done_by ?? "",
+      thu_done_by: existingRecord.thu_done_by ?? "",
+      fri_done_by: existingRecord.fri_done_by ?? "",
+      sat_done_by: existingRecord.sat_done_by ?? "",
+    };
+  });
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  function toggleDay(d) {
+    setAvail((a) => ({ ...a, [d]: !a[d], ...(!a[d] ? {} : { [`${d}_done_by`]: "" }) }));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    const payload = {
+      driver_id: driver.id,
+      week_start: weekStart,
+      ...avail,
+      updated_after_saturday: true,
+      update_reason: reason.trim() || "Admin edit",
+    };
+    DAYS.forEach((d) => { if (!avail[d]) payload[`${d}_done_by`] = null; });
+    const { error: err } = await supabase
+      .from("availability").upsert(payload, { onConflict: "driver_id,week_start" });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    onSaved();
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ width: 540 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Edit Availability — {driver.name}</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}>
+          Week of {new Date(weekStart + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          {existingRecord ? " · existing record" : " · no record yet"}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          {DAYS.map((d, i) => (
+            <div key={d} style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "8px 12px", background: "var(--bg)",
+              border: `1px solid ${avail[d] ? "var(--success)" : "var(--border)"}`, borderRadius: 6,
+            }}>
+              <input type="checkbox" id={`avail-${d}`} checked={avail[d]} onChange={() => toggleDay(d)} />
+              <label htmlFor={`avail-${d}`} style={{ flex: 1, fontWeight: 700, cursor: "pointer" }}>
+                {DAY_LABELS[i]}
+              </label>
+              {avail[d] && (
+                <>
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>Done by</span>
+                  <input
+                    type="time"
+                    value={avail[`${d}_done_by`]}
+                    onChange={(e) => setAvail((a) => ({ ...a, [`${d}_done_by`]: e.target.value }))}
+                    style={{ width: 110 }}
+                  />
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="field">
+          <label>Reason (optional — defaults to "Admin edit")</label>
+          <input type="text" placeholder="Driver called out, requested change, etc." value={reason} onChange={(e) => setReason(e.target.value)} />
+        </div>
+
+        {error && <div className="error-msg">{error}</div>}
+
+        <div className="modal-actions">
+          <button className="btn btn-ghost" style={{ padding: "8px 16px", fontSize: 12 }} onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" style={{ padding: "8px 16px", fontSize: 12 }} onClick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : "Save Availability →"}
+          </button>
+        </div>
       </div>
     </div>
   );
