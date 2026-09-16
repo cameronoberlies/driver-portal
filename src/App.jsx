@@ -2291,6 +2291,9 @@ function LiveDriversMap({ drivers }) {
     const map = window.L.map(mapRef.current, {
       zoomControl: true,
       attributionControl: false,
+      scrollWheelZoom: true,
+      wheelPxPerZoomLevel: 120,
+      wheelDebounceTime: 40,
     }).setView([36.0, -80.0], 6);
     window.L.tileLayer(
       "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png",
