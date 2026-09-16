@@ -2293,9 +2293,9 @@ function LiveDriversMap({ drivers }) {
       attributionControl: false,
     }).setView([36.0, -80.0], 6);
     window.L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png",
       {
-        maxZoom: 19,
+        maxZoom: 20,
       },
     ).addTo(map);
     // Dealership geofence boundary (Discovery Automotive - Shelby, NC)
