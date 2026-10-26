@@ -92,26 +92,32 @@ export default function PickupCalculator({ supabase }) {
     }), 100);
   }
 
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+    ]);
+  }
+
   async function checkCache(loc) {
     const key = loc.toLowerCase().trim();
 
-    // 1. Check in-memory cache first (instant)
     if (memoryCache.current[key]) {
       return { ...memoryCache.current[key], source: 'memory' };
     }
 
-    // 2. Check Supabase cache
     if (supabase) {
-      const { data, error } = await supabase
-        .from('location_cache')
-        .select('distance, cost')
-        .ilike('location', loc.trim())
-        .maybeSingle();
-
-      if (!error && data) {
-        // Store in memory cache too
-        memoryCache.current[key] = { distance: data.distance, cost: data.cost };
-        return { distance: data.distance, cost: data.cost, source: 'db' };
+      try {
+        const { data, error } = await withTimeout(
+          supabase.from('location_cache').select('distance, cost').ilike('location', loc.trim()).maybeSingle(),
+          4000
+        );
+        if (!error && data) {
+          memoryCache.current[key] = { distance: data.distance, cost: data.cost };
+          return { distance: data.distance, cost: data.cost, source: 'db' };
+        }
+      } catch {
+        // Timeout or DB error — skip cache, calculate fresh
       }
     }
 
@@ -120,22 +126,31 @@ export default function PickupCalculator({ supabase }) {
 
   async function saveToCache(loc, distance, cost) {
     const key = loc.toLowerCase().trim();
-
-    // Save to memory cache
     memoryCache.current[key] = { distance, cost };
-
-    // Save to Supabase
     if (supabase) {
-      await supabase
+      // Fire-and-forget — don't block the result on a slow DB write
+      supabase
         .from('location_cache')
-        .upsert({ location: loc.trim(), distance, cost }, { onConflict: 'location' });
+        .upsert({ location: loc.trim(), distance, cost }, { onConflict: 'location' })
+        .then(() => {}).catch(() => {});
+    }
+  }
+
+  async function fetchWithTimeout(url, ms = 8000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      return response;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
   async function geocodeLocation(loc) {
     const apiKey = "pk.ad8425665c12e1b7f5d7827258d59077";
     const url = `https://us1.locationiq.com/v1/search?key=${apiKey}&q=${encodeURIComponent(loc)}, USA&format=json&limit=1`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url);
     if (!response.ok) throw new Error("Failed to find location. Please try again.");
     const data = await response.json();
     if (data.length === 0) throw new Error("Location not found. Please check the address and try again.");
@@ -145,7 +160,7 @@ export default function PickupCalculator({ supabase }) {
   async function getDrivingDistance(origin) {
     const apiKey = "pk.ad8425665c12e1b7f5d7827258d59077";
     const url = `https://us1.locationiq.com/v1/directions/driving/${origin.lon},${origin.lat};${DEST_LON},${DEST_LAT}?key=${apiKey}&overview=false`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url);
     if (!response.ok) throw new Error("Failed to calculate route. Please try again.");
     const data = await response.json();
     if (data.code !== "Ok" || !data.routes || data.routes.length === 0) {

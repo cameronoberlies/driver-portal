@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from "react";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "@supabase/supabase-js";
 import {
   getWeekBounds,
   formatDate,
@@ -9085,6 +9085,8 @@ export default function App() {
           window.history.replaceState({}, "", window.location.pathname);
         } catch {}
       }
+    }).catch(() => {
+      setAppLoading(false);
     });
 
     const {
